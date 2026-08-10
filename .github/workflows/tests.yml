@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # ChromaDB's default embedding function downloads a small ONNX model
+      # on first use; cache it so repeat runs don't re-download ~80MB.
+      - name: Cache local embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/chroma/onnx_models
+          key: chroma-onnx-minilm
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Generate synthetic data
+        run: python -m app.utils.generate_synthetic_data
+
+      - name: Build dbt models
+        working-directory: dbt
+        run: dbt build --profiles-dir .
+
+      - name: Build vector store index
+        run: python -m app.services.vector_store
+
+      # No ANTHROPIC_API_KEY secret is provided here, so
+      # tests/test_live_integration.py auto-skips -- it makes real, billed
+      # Claude API calls and is meant for manual verification, not CI.
+      - name: Run tests
+        run: pytest -v

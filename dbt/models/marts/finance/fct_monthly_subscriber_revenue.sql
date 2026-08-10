@@ -1,5 +1,10 @@
+{{ config(schema='semantic_views', tags=['semantic_view'], materialized='table') }}
+
 -- Note: ARM is intentionally omitted as a stored pre-computed ratio column
 -- to prevent illegal downstream AVG() operations on non-additive metrics.
+-- schema='semantic_views' (see macros/generate_schema_name.sql) makes this
+-- the physical, query-safety-enforced boundary the text-to-SQL agent is
+-- restricted to -- not just an app-level string check.
 with base_subscriptions as (
 
     select

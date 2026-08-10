@@ -12,6 +12,25 @@ class SqlValidationTests(unittest.TestCase):
         sql = "DROP TABLE users"
         self.assertFalse(validate_sql_statement(sql))
 
+    def test_rejects_unapproved_table(self) -> None:
+        sql = "SELECT * FROM other_secret_table"
+        self.assertFalse(validate_sql_statement(sql))
+
+    def test_rejects_stacked_statement_injection(self) -> None:
+        sql = (
+            "SELECT * FROM semantic_views.fct_monthly_subscriber_revenue; "
+            "DROP TABLE semantic_views.fct_monthly_subscriber_revenue"
+        )
+        self.assertFalse(validate_sql_statement(sql))
+
+    def test_allows_subquery_over_approved_view(self) -> None:
+        sql = (
+            "SELECT * FROM ("
+            "SELECT 1 FROM semantic_views.fct_monthly_subscriber_revenue"
+            ") AS sub"
+        )
+        self.assertTrue(validate_sql_statement(sql))
+
 
 if __name__ == "__main__":
     unittest.main()

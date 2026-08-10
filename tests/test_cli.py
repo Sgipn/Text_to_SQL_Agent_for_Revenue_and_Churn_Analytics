@@ -58,6 +58,14 @@ class CliTests(unittest.TestCase):
         self.assertIn("Could not answer this question", output)
         self.assertIn("Churn rate", output)
 
+    def test_prints_confidence_interval_for_ratio_metric_question(self) -> None:
+        client = FakeLLMClient([VALID_ARM_SQL])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            main(["What is our ARM?"], llm_client=client)
+
+        self.assertIn("% CI:", buf.getvalue())
+
     def test_truncates_large_result_sets_for_display(self) -> None:
         client = FakeLLMClient(
             ["```sql\nSELECT * FROM semantic_views.fct_monthly_subscriber_revenue\n```"]

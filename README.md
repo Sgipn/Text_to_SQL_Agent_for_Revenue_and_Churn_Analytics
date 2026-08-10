@@ -65,6 +65,28 @@ The approved views also live in a physically separate `semantic_views` schema in
 
 `average_revenue_per_membership` (ARM) is defined as a `ratio` metric in dbt/MetricFlow: `SUM(total_net_revenue) / SUM(active_paid_subscribers)`. ARM is never stored as a pre-computed per-row column, because it's non-additive -- averaging monthly ARM values does not equal quarterly ARM. The agent's system prompt enforces the same rule on generated SQL.
 
+### Confidence intervals
+
+Because ARM is a ratio of two random variables, its sampling distribution is non-linear -- `Var(R)` and `Var(S)` alone don't give `Var(R/S)`. When a generated query's SELECT list references both of a ratio metric's columns (filtering on them doesn't count -- see below), `app/services/metric_statistics.py` computes a confidence interval via the Delta Method (a first-order Taylor expansion), treating each period in a companion breakdown query -- grouped by month, reusing the original query's `WHERE` filter -- as an independent sampling unit:
+
+```
+Var(R_bar/S_bar) ~= (1/mu_S^2)Var(R_bar) + (mu_R^2/mu_S^4)Var(S_bar) - 2(mu_R/mu_S^3)Cov(R_bar,S_bar)
+```
+
+The critical value comes from Student's t distribution (df = n_periods - 1), not a fixed normal z-score. They agree for large n, but a `WHERE` filter can narrow a slice down to just a few periods, where a normal approximation would understate the uncertainty right when the estimate is least reliable.
+
+```
+$ semantic-agent "What is the ARM for Premium plans in EMEA?"
+...
+Result (1 rows):
+ average_revenue_per_membership
+                       19.459353
+
+95% CI: [19.2675, 19.6512] (estimate=19.4594, se=0.0928, n=24 periods)
+```
+
+Validated with Monte Carlo simulation: empirical coverage of the nominal 95% interval stays close to 95% from n=3 periods up through n=100 (3,000 repeated samples per n), which is what motivated switching from a fixed z-score to the t distribution in the first place -- the z-score version undercovered noticeably at small n. This is enrichment, not part of the safety-critical path -- if it fails for any reason (too few periods, an incompatible filter, NaN inputs), the agent silently omits it rather than failing the whole answer.
+
 ## Tech stack
 
 - **Python 3.11+**
@@ -72,6 +94,7 @@ The approved views also live in a physically separate `semantic_views` schema in
 - **dbt-duckdb** (dbt 1.12 / MetricFlow) -- semantic models, metric definitions, and the `semantic_views` schema boundary
 - **ChromaDB**, using its default local embedding model (ONNX MiniLM) -- retrieval with no API key or per-call cost
 - **sqlglot** -- SQL AST parsing for query safety
+- **SciPy/NumPy** -- Delta Method confidence intervals for ratio metrics
 - **Anthropic Claude API** (`claude-sonnet-5`) -- SQL generation
 
 ## Repository layout

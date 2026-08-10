@@ -29,6 +29,15 @@ class AskRequest(BaseModel):
     max_attempts: Optional[int] = Field(default=None, ge=1, le=5)
 
 
+class ConfidenceIntervalResponse(BaseModel):
+    estimate: float
+    standard_error: float
+    lower: float
+    upper: float
+    n_units: int
+    confidence_level: float
+
+
 class AskResponse(BaseModel):
     question: str
     succeeded: bool
@@ -37,6 +46,7 @@ class AskResponse(BaseModel):
     error: Optional[str] = None
     rows: Optional[List[Dict[str, Any]]] = None
     row_count: Optional[int] = None
+    confidence_interval: Optional[ConfidenceIntervalResponse] = None
 
 
 def get_llm_client() -> LLMClient:
@@ -86,6 +96,18 @@ def ask(request: AskRequest, llm_client: LLMClient = Depends(get_llm_client)) ->
         rows = _dataframe_to_records(result.result)
         row_count = len(result.result)
 
+    confidence_interval = None
+    if result.confidence_interval is not None:
+        ci = result.confidence_interval
+        confidence_interval = ConfidenceIntervalResponse(
+            estimate=ci.estimate,
+            standard_error=ci.standard_error,
+            lower=ci.lower,
+            upper=ci.upper,
+            n_units=ci.n_units,
+            confidence_level=ci.confidence_level,
+        )
+
     return AskResponse(
         question=result.question,
         succeeded=result.succeeded,
@@ -94,4 +116,5 @@ def ask(request: AskRequest, llm_client: LLMClient = Depends(get_llm_client)) ->
         error=result.error,
         rows=rows,
         row_count=row_count,
+        confidence_interval=confidence_interval,
     )

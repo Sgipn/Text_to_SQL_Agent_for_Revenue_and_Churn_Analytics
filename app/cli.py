@@ -65,6 +65,14 @@ def main(argv: Optional[List[str]] = None, llm_client: Optional[LLMClient] = Non
         print(f"Result ({len(df)} rows):")
         print(df.to_string(index=False))
 
+    ci = result.confidence_interval
+    if ci is not None:
+        pct = int(ci.confidence_level * 100)
+        print(
+            f"\n{pct}% CI: [{ci.lower:.4f}, {ci.upper:.4f}] "
+            f"(estimate={ci.estimate:.4f}, se={ci.standard_error:.4f}, n={ci.n_units} periods)"
+        )
+
     return 0
 
 

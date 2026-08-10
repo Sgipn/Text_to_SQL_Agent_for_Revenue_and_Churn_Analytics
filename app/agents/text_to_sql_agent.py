@@ -10,12 +10,14 @@ from typing import Optional
 
 import pandas as pd
 
+from app.agents.confidence_interval import compute_ratio_confidence_interval
 from app.agents.llm_client import ClaudeLLMClient, LLMClient
 from app.agents.prompt_builder import build_retry_prompt, build_system_prompt
 from app.agents.sql_extraction import parse_llm_response
+from app.services.metric_statistics import RatioConfidenceInterval
 from app.services.query_execution import execute_safe_query
 from app.services.retrieval import DEFAULT_TOP_K, format_context_for_prompt, retrieve_context
-from app.services.sql_validation import UnsafeQueryError
+from app.services.sql_validation import UnsafeQueryError, parse_safe_select
 
 DEFAULT_MAX_ATTEMPTS = 2
 
@@ -27,6 +29,7 @@ class AgentResult:
     result: Optional[pd.DataFrame]
     attempts: int
     error: Optional[str] = None
+    confidence_interval: Optional[RatioConfidenceInterval] = None
 
     @property
     def succeeded(self) -> bool:
@@ -66,7 +69,15 @@ def answer_question(
 
         try:
             result = execute_safe_query(sql)
-            return AgentResult(question=question, sql=sql, result=result, attempts=attempt)
+            statement = parse_safe_select(sql)  # already validated by execute_safe_query above
+            confidence_interval = compute_ratio_confidence_interval(statement)
+            return AgentResult(
+                question=question,
+                sql=sql,
+                result=result,
+                attempts=attempt,
+                confidence_interval=confidence_interval,
+            )
         except UnsafeQueryError as exc:
             last_error = str(exc)
             user_prompt = build_retry_prompt(question, sql, last_error)

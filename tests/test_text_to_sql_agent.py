@@ -10,6 +10,13 @@ VALID_ARM_SQL = (
     "FROM semantic_views.fct_monthly_subscriber_revenue\n"
     "```"
 )
+REVENUE_BY_REGION_SQL = (
+    "```sql\n"
+    "SELECT region_id, sum(total_net_revenue) as total_net_revenue\n"
+    "FROM semantic_views.fct_monthly_subscriber_revenue\n"
+    "GROUP BY region_id\n"
+    "```"
+)
 UNAPPROVED_TABLE_SQL = "```sql\nSELECT * FROM users\n```"
 DESTRUCTIVE_SQL = "```sql\nDROP TABLE semantic_views.fct_monthly_subscriber_revenue\n```"
 NO_QUERY_RESPONSE = "NO_QUERY: Churn rate is not a metric defined in the available semantic view."
@@ -48,6 +55,24 @@ class TextToSqlAgentTests(unittest.TestCase):
         self.assertEqual(len(client.calls), 1)
         self.assertIsNotNone(result.result)
         self.assertGreater(len(result.result), 0)
+
+    def test_attaches_confidence_interval_for_ratio_metric_query(self) -> None:
+        client = FakeLLMClient([VALID_ARM_SQL])
+        result = answer_question("What is our Average Revenue per Membership?", llm_client=client)
+
+        self.assertTrue(result.succeeded)
+        ci = result.confidence_interval
+        self.assertIsNotNone(ci)
+        self.assertLess(ci.lower, ci.estimate)
+        self.assertGreater(ci.upper, ci.estimate)
+        self.assertGreater(ci.n_units, 1)
+
+    def test_no_confidence_interval_for_non_ratio_query(self) -> None:
+        client = FakeLLMClient([REVENUE_BY_REGION_SQL])
+        result = answer_question("What was total revenue by region?", llm_client=client)
+
+        self.assertTrue(result.succeeded)
+        self.assertIsNone(result.confidence_interval)
 
     def test_retries_after_invalid_sql_then_succeeds(self) -> None:
         client = FakeLLMClient([UNAPPROVED_TABLE_SQL, VALID_ARM_SQL])

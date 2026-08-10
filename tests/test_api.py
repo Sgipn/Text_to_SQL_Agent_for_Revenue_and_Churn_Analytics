@@ -60,6 +60,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(body["row_count"], 1)
         self.assertIsInstance(body["rows"], list)
 
+    def test_ask_includes_confidence_interval_for_ratio_metric(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
+
+        response = self.client.post("/ask", json={"question": "What is our ARM?"})
+
+        body = response.json()
+        ci = body["confidence_interval"]
+        self.assertIsNotNone(ci)
+        self.assertLess(ci["lower"], ci["estimate"])
+        self.assertGreater(ci["upper"], ci["estimate"])
+        self.assertEqual(ci["confidence_level"], 0.95)
+
+    def test_ask_omits_confidence_interval_for_non_ratio_query(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient(
+            [
+                "```sql\nSELECT region_id, sum(total_net_revenue) as total_net_revenue "
+                "FROM semantic_views.fct_monthly_subscriber_revenue GROUP BY region_id\n```"
+            ]
+        )
+
+        response = self.client.post("/ask", json={"question": "Total revenue by region?"})
+
+        self.assertIsNone(response.json()["confidence_interval"])
+
     def test_ask_returns_decline_reason_without_sql(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([NO_QUERY_RESPONSE])
 

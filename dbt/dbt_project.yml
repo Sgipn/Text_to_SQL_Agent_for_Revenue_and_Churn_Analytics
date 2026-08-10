@@ -1,0 +1,12 @@
+name: 'semantic_metric_repository'
+version: '1.0.0'
+config-version: 2
+profile: 'duckdb_profile'
+model-paths: ["models"]
+seed-paths: ["seeds"]
+analysis-paths: ["analysis"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets:
+  - "target"
+  - "dbt_packages"

@@ -1,0 +1,17 @@
+[project]
+name = "semantic-metric-repository"
+version = "0.1.0"
+description = "Semantic metric repository and self-service text-to-SQL agent"
+requires-python = ">=3.11"
+dependencies = [
+  "duckdb>=1.1.0",
+  "dbt-duckdb>=1.8.0",
+  "sqlglot>=25.0.0",
+  "chromadb>=0.5.0",
+  "pandas>=2.0.0",
+  "numpy>=1.26.0",
+  "pydantic>=2.0.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

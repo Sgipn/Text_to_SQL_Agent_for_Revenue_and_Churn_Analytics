@@ -96,10 +96,11 @@ tests/
    conda create -n semantic-metric-repo python=3.11
    conda activate semantic-metric-repo
    ```
-2. **Install the project (editable):**
+2. **Install the project (editable), including test tools:**
    ```
-   pip install -e .
+   pip install -e ".[dev]"
    ```
+   (drop `[dev]` if you only want to run the agent, not the test suite)
 3. **Generate synthetic data** -- subscription billing records with realistic proration, promo, and churn edge cases:
    ```
    python -m app.utils.generate_synthetic_data

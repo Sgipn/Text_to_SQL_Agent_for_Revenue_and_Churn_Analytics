@@ -19,6 +19,12 @@ dependencies = [
   "python-dotenv>=1.0.0"
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+semantic-agent = "app.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["app*"]
 

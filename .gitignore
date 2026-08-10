@@ -10,3 +10,4 @@ dbt/.user.yml
 *.duckdb.wal
 .env
 data/chroma/
+*.egg-info/

@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: semantic-metric-repository
+Version: 0.1.0
+Summary: Semantic metric repository and self-service text-to-SQL agent
+Requires-Python: >=3.11
+Requires-Dist: duckdb>=1.1.0
+Requires-Dist: dbt-duckdb>=1.8.0
+Requires-Dist: sqlglot>=25.0.0
+Requires-Dist: chromadb>=0.5.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: anthropic>=0.40.0
+Requires-Dist: python-dotenv>=1.0.0

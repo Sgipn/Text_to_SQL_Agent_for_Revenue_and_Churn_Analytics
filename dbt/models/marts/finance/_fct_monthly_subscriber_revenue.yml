@@ -1,0 +1,28 @@
+version: 2
+
+models:
+  - name: fct_monthly_subscriber_revenue
+    description: >
+      Approved semantic view for subscription revenue and subscriber counts,
+      grouped by month, region, and plan. Grain is one row per
+      (metric_month, region_id, plan_type). Revenue and subscriber counts are
+      additive and safe to SUM across rows; Average Revenue per Membership
+      (ARM) must be computed as a ratio of summed totals, never averaged
+      directly, since it is a non-additive ratio metric.
+    columns:
+      - name: metric_month
+        description: "First day of the billing month this row aggregates."
+      - name: region_id
+        description: "Subscriber billing region (US, EMEA, APAC, LATAM)."
+      - name: plan_type
+        description: "Subscription tier (Basic, Standard, Premium)."
+      - name: active_paid_subscribers
+        description: >
+          Count of distinct users billed on a paid tier in this month.
+          Excludes free trial months. Additive across months and regions.
+      - name: total_net_revenue
+        description: >
+          Sum of net revenue billed in this month, after promotional
+          discounts and mid-month cancellation proration. Additive across
+          months and regions. Never store or average a pre-computed ARM
+          value derived from this column.

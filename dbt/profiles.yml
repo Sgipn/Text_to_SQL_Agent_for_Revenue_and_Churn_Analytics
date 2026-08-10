@@ -1,0 +1,7 @@
+duckdb_profile:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'semantic_metric_repository.duckdb'
+      threads: 4

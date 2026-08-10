@@ -1,0 +1,46 @@
+version: 2
+
+semantic_models:
+  - name: fct_monthly_subscriber_revenue
+    model: ref('fct_monthly_subscriber_revenue')
+    description: "Granular monthly revenue and active subscriber counts by region and plan."
+    defaults:
+      agg_time_dimension: metric_month
+    entities:
+      - name: region_id
+        type: primary
+    dimensions:
+      - name: metric_month
+        type: time
+        type_params:
+          time_granularity: month
+      - name: plan_type
+        type: categorical
+    measures:
+      - name: total_net_revenue
+        agg: sum
+        expr: total_net_revenue
+      - name: active_paid_subscribers
+        agg: sum
+        expr: active_paid_subscribers
+
+metrics:
+  - name: total_net_revenue
+    label: "Total Net Revenue"
+    type: simple
+    type_params:
+      measure: total_net_revenue
+
+  - name: active_paid_subscribers
+    label: "Active Paid Subscribers"
+    type: simple
+    type_params:
+      measure: active_paid_subscribers
+
+  - name: average_revenue_per_membership
+    label: "Average Revenue per Membership (ARM)"
+    type: ratio
+    type_params:
+      numerator: total_net_revenue
+      denominator: active_paid_subscribers
+    description: "Ratio of total net revenue divided by active paid subscribers over a selected temporal window."

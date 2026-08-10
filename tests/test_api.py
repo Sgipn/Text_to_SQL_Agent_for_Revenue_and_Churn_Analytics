@@ -1,0 +1,95 @@
+import unittest
+
+from fastapi.testclient import TestClient
+
+from app.api import app, get_llm_client
+from app.services.query_execution import DB_PATH
+from app.services.vector_store import get_collection
+
+VALID_ARM_SQL = (
+    "```sql\n"
+    "SELECT sum(total_net_revenue) / sum(active_paid_subscribers) as arm\n"
+    "FROM semantic_views.fct_monthly_subscriber_revenue\n"
+    "```"
+)
+NO_QUERY_RESPONSE = "NO_QUERY: Churn rate is not a metric defined in the available semantic view."
+DESTRUCTIVE_SQL = "```sql\nDROP TABLE semantic_views.fct_monthly_subscriber_revenue\n```"
+
+
+class FakeLLMClient:
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = list(responses)
+
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        return self._responses.pop(0)
+
+
+def _retrieval_index_ready() -> bool:
+    try:
+        return get_collection().count() > 0
+    except Exception:
+        return False
+
+
+@unittest.skipUnless(DB_PATH.exists(), f"DuckDB database not found at {DB_PATH}; run `dbt build` first")
+@unittest.skipUnless(
+    _retrieval_index_ready(), "Vector store not indexed; run `python -m app.services.vector_store` first"
+)
+class ApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def tearDown(self) -> None:
+        app.dependency_overrides.clear()
+
+    def test_health_check(self) -> None:
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_ask_returns_sql_and_json_safe_rows_on_success(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
+
+        response = self.client.post("/ask", json={"question": "What is our ARM?"})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["succeeded"])
+        self.assertEqual(body["attempts"], 1)
+        self.assertIn("semantic_views.fct_monthly_subscriber_revenue", body["sql"])
+        self.assertEqual(body["row_count"], 1)
+        self.assertIsInstance(body["rows"], list)
+
+    def test_ask_returns_decline_reason_without_sql(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([NO_QUERY_RESPONSE])
+
+        response = self.client.post("/ask", json={"question": "What is our churn rate?"})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["succeeded"])
+        self.assertIsNone(body["sql"])
+        self.assertIsNone(body["rows"])
+        self.assertIn("Churn rate", body["error"])
+
+    def test_ask_blocks_destructive_generated_sql(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([DESTRUCTIVE_SQL, DESTRUCTIVE_SQL])
+
+        response = self.client.post("/ask", json={"question": "Delete everything", "max_attempts": 2})
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["succeeded"])
+        self.assertEqual(body["attempts"], 2)
+
+    def test_ask_rejects_empty_question_with_422(self) -> None:
+        response = self.client.post("/ask", json={"question": ""})
+        self.assertEqual(response.status_code, 422)
+
+    def test_ask_rejects_missing_question_with_422(self) -> None:
+        response = self.client.post("/ask", json={})
+        self.assertEqual(response.status_code, 422)
+
+
+if __name__ == "__main__":
+    unittest.main()

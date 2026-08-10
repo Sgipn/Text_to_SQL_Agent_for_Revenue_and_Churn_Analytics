@@ -27,7 +27,7 @@ jobs:
           key: chroma-onnx-minilm
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,api]"
 
       - name: Generate synthetic data
         run: python -m app.utils.generate_synthetic_data

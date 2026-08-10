@@ -20,7 +20,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0.0"]
+dev = ["pytest>=8.0.0", "httpx2"]
+api = ["fastapi>=0.110.0", "uvicorn[standard]>=0.29.0"]
 
 [project.scripts]
 semantic-agent = "app.cli:main"

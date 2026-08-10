@@ -120,6 +120,38 @@ tests/
    ```
    Everything except `tests/test_live_integration.py` runs with no API key; that file auto-skips unless `ANTHROPIC_API_KEY` is set.
 
+## Interfaces
+
+Beyond calling `answer_question()` directly (see the Example above), the agent is also reachable via:
+
+**CLI** -- installed as a console script by `pip install -e .`:
+```
+semantic-agent "What was total revenue by region in Q2 2024?"
+```
+(equivalently: `python -m app.cli "..."`). Prints the generated SQL and result table; exits non-zero if the question can't be answered.
+
+**HTTP API** -- a minimal FastAPI app (`pip install -e ".[api]"` first):
+```
+uvicorn app.api:app --reload
+```
+```
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is the ARM for Basic plans in the US?"}'
+```
+```json
+{
+  "question": "What is the ARM for Basic plans in the US?",
+  "succeeded": true,
+  "attempts": 1,
+  "sql": "SELECT SUM(total_net_revenue) / SUM(active_paid_subscribers) AS average_revenue_per_membership FROM semantic_views.fct_monthly_subscriber_revenue WHERE region_id = 'US' AND plan_type = 'Basic'",
+  "error": null,
+  "rows": [{"average_revenue_per_membership": 7.7579376257545265}],
+  "row_count": 1
+}
+```
+`GET /health` is a plain liveness check. Interactive docs are available at `/docs` once the server is running.
+
 ## Roadmap
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log, including what's planned next: CI, a CLI/API demo surface, confidence intervals for ratio metrics, and further semantic-layer hardening.

@@ -263,6 +263,7 @@ _INDEX_HTML = """<!doctype html>
   :root {
     --bg: #D3D9D4; --surface: #FFFFFF; --text: #212A31; --text-dim: #4F6268;
     --accent: #124E66; --accent-soft: #DCE7EA; --rule: #C4CCC7; --good: #2E9E5B; --error: #D14343;
+    --chart-1: #124E66; --chart-2: #3FA0C2; --chart-3: #748D92; --chart-4: #2E3944; --chart-5: #8FBFD1;
     --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
     --display: "Space Grotesk", var(--sans);
     --mono: ui-monospace, "SF Mono", Consolas, monospace;
@@ -271,6 +272,7 @@ _INDEX_HTML = """<!doctype html>
     :root {
       --bg: #212A31; --surface: #2E3944; --text: #D3D9D4; --text-dim: #93A2A8;
       --accent: #3FA0C2; --accent-soft: #1B3C47; --rule: #3A454E; --good: #4CC479; --error: #E5726B;
+      --chart-1: #3FA0C2; --chart-2: #124E66; --chart-3: #93A2A8; --chart-4: #D3D9D4; --chart-5: #5B8A9E;
     }
   }
   * { box-sizing: border-box; }
@@ -384,33 +386,60 @@ document.querySelectorAll('.example-chip').forEach(function (chip) {
 
 let activeChart = null;
 
+const PCT_NAME_PATTERN = /pct|percent|proportion|share/i;
+
+function isNumericColumn(col, rows) {
+  return rows.every(function (r) { return typeof r[col] === 'number'; });
+}
+
+// A column "sums to a whole" if its values across every returned row add up
+// to ~100 (a percentage already scaled 0-100) or ~1 (a 0-1 fraction) --
+// either shape means the rows are parts of one whole, which is what a pie
+// chart communicates and a bar/line chart doesn't.
+function sumsToWhole(col, rows) {
+  const total = rows.reduce(function (sum, r) { return sum + r[col]; }, 0);
+  return (total > 0.9 && total < 1.1) || (total > 90 && total < 110);
+}
+
 function detectChartSpec(columns, rows) {
-  // Only a single dimension + a single measure is unambiguous enough to
-  // chart automatically -- anything else (multi-dimension breakdowns,
-  // single-value answers) stays table-only rather than guessing.
-  if (columns.length !== 2 || rows.length < 2) return null;
+  // Exactly one non-numeric column (the dimension) is required to chart at
+  // all -- multi-dimension breakdowns stay table-only rather than guessing
+  // which column to plot against. Up to two numeric columns are tolerated:
+  // the model consistently returns both a raw aggregate and a percentage
+  // column for "percentage of X" questions (e.g. active_subscribers *and*
+  // pct_of_active_subscribers), not the percentage alone.
+  if (rows.length < 2) return null;
+  const numericCols = columns.filter(function (c) { return isNumericColumn(c, rows); });
+  const dimCols = columns.filter(function (c) { return numericCols.indexOf(c) === -1; });
+  if (dimCols.length !== 1 || numericCols.length === 0 || numericCols.length > 2) return null;
 
-  const [colA, colB] = columns;
-  const aIsNumeric = rows.every(function (r) { return typeof r[colA] === 'number'; });
-  const bIsNumeric = rows.every(function (r) { return typeof r[colB] === 'number'; });
+  const dimCol = dimCols[0];
+  const pctCol = numericCols.find(function (c) { return PCT_NAME_PATTERN.test(c); })
+    || numericCols.find(function (c) { return sumsToWhole(c, rows); });
 
-  let dimCol, measureCol;
-  if (!aIsNumeric && bIsNumeric) { dimCol = colA; measureCol = colB; }
-  else if (aIsNumeric && !bIsNumeric) { dimCol = colB; measureCol = colA; }
-  else return null;
-
-  return { dimCol: dimCol, measureCol: measureCol, isTimeSeries: dimCol === 'metric_month' };
+  if (dimCol === 'metric_month') {
+    return { type: 'line', dimCol: dimCol, measureCol: pctCol || numericCols[0] };
+  }
+  if (pctCol) {
+    return { type: 'pie', dimCol: dimCol, measureCol: pctCol };
+  }
+  if (numericCols.length === 1) {
+    return { type: 'bar', dimCol: dimCol, measureCol: numericCols[0] };
+  }
+  return null;
 }
 
 function renderChart(canvas, spec, rows) {
   const styles = getComputedStyle(document.body);
   const accent = styles.getPropertyValue('--accent').trim();
   const textDim = styles.getPropertyValue('--text-dim').trim();
+  const text = styles.getPropertyValue('--text').trim();
   const rule = styles.getPropertyValue('--rule').trim();
   const sansFont = styles.getPropertyValue('--sans').trim();
+  const slicePalette = [1, 2, 3, 4, 5].map(function (n) { return styles.getPropertyValue('--chart-' + n).trim(); });
 
   const sorted = rows.slice();
-  if (spec.isTimeSeries) {
+  if (spec.type === 'line') {
     sorted.sort(function (a, b) { return String(a[spec.dimCol]).localeCompare(String(b[spec.dimCol])); });
   } else {
     sorted.sort(function (a, b) { return b[spec.measureCol] - a[spec.measureCol]; });
@@ -420,24 +449,50 @@ function renderChart(canvas, spec, rows) {
   const values = sorted.map(function (r) { return r[spec.measureCol]; });
 
   if (activeChart) { activeChart.destroy(); }
+
+  if (spec.type === 'pie') {
+    activeChart = new Chart(canvas, {
+      type: 'pie',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: spec.measureCol,
+          data: values,
+          backgroundColor: labels.map(function (_, i) { return slicePalette[i % slicePalette.length]; }),
+          borderColor: styles.getPropertyValue('--surface').trim(),
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right', labels: { color: text, font: { family: sansFont } } },
+        },
+      },
+    });
+    return;
+  }
+
+  const isLine = spec.type === 'line';
   activeChart = new Chart(canvas, {
-    type: spec.isTimeSeries ? 'line' : 'bar',
+    type: isLine ? 'line' : 'bar',
     data: {
       labels: labels,
       datasets: [{
         label: spec.measureCol,
         data: values,
-        backgroundColor: spec.isTimeSeries ? 'transparent' : accent,
+        backgroundColor: isLine ? 'transparent' : accent,
         borderColor: accent,
-        borderWidth: spec.isTimeSeries ? 2 : 0,
-        borderRadius: spec.isTimeSeries ? 0 : 4,
+        borderWidth: isLine ? 2 : 0,
+        borderRadius: isLine ? 0 : 4,
         tension: 0.25,
         pointBackgroundColor: accent,
-        pointRadius: spec.isTimeSeries ? 3 : 0,
+        pointRadius: isLine ? 3 : 0,
       }],
     },
     options: {
-      indexAxis: spec.isTimeSeries ? 'x' : 'y',
+      indexAxis: isLine ? 'x' : 'y',
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },

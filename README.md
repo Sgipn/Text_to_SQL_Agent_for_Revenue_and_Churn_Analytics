@@ -2,8 +2,9 @@
 
 [![Tests](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml/badge.svg)](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml)
 
-Business metrics like Average Revenue per Membership (ARM) are easy to compute inconsistently. Differences in calculation logic may yield different business metrics which can misinform business decisions. This project defines metrics once, in a semantic layer, and lets practitioners ask questions about in plain English instead of writing SQL by hand.
+SQL is not an easy or necessary skill for many business stakeholders and can lead to inconsistent results, and incorrect insights if used incorrectly. In an effort to alleviate this stress and reduce the barrier to obtaining business metrics, I've designed a web interface that allows users to ask business questions in plain English instead of writing SQL by hand.
 
+## An Overview of the Mechanics:
 A natural-language question is grounded against a vector store of metric/schema definitions, turned into SQL by Claude, validated by parsing its AST (not string matching), and executed read-only against DuckDB. If the generated SQL fails validation, the error is fed back to the model for a retry. If the question can't be answered from the metrics that are actually defined, the agent says so instead of guessing.
 
 ## How it works

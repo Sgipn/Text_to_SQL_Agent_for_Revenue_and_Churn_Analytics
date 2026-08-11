@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml/badge.svg)](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml)
 
-**Live demo:** [semantic-metric-repository.onrender.com](https://semantic-metric-repository.onrender.com) -- free tier, so the first request after 15 minutes of idle takes about a minute to cold-start.
+**Live demo:** [semantic-metric-repository.onrender.com](https://semantic-metric-repository.onrender.com) (free tier :-( so the first request after 15 minutes of idle takes about a minute to cold-start.)
 
 SQL is not an easy or necessary skill for many business stakeholders and can lead to inconsistent insights if used incorrectly. In an effort to reduce the barrier to obtaining business metrics, I've designed a web interface that allows users to ask business questions in plain English instead of writing SQL by hand.
 

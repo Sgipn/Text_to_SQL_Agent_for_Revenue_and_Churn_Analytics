@@ -2,7 +2,20 @@
 
 [![Tests](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml/badge.svg)](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml)
 
+**Live demo:** [semantic-metric-repository.onrender.com](https://semantic-metric-repository.onrender.com) -- free tier, so the first request after 15 minutes of idle takes about a minute to cold-start.
+
 SQL is not an easy or necessary skill for many business stakeholders and can lead to inconsistent insights if used incorrectly. In an effort to reduce the barrier to obtaining business metrics, I've designed a web interface that allows users to ask business questions in plain English instead of writing SQL by hand.
+
+## Screenshots
+
+A percentage-of-whole question renders as a pie chart, auto-detected from the shape of the returned columns rather than requested explicitly:
+
+![Percentage revenue by plan, rendered as a pie chart with the generated SQL and result table](docs/screenshots/pie-chart-example.png)
+
+A time-series question renders as a line chart, with the generated SQL, chart, and result table together in one view:
+
+![Total revenue for LATAM per month, rendered as a line chart with the generated SQL above it](docs/screenshots/line-chart-example.png)
+![Result table and natural-language summary backing the line chart above](docs/screenshots/line-chart-result-table.png)
 
 ## An Overview of the Mechanics:
 1. **You ask a question** in plain English (E.g. "What was our churn rate in APAC last month?") and a text-to-SQL agent takes it from there.

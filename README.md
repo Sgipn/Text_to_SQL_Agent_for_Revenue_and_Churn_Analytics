@@ -5,7 +5,13 @@
 SQL is not an easy or necessary skill for many business stakeholders and can lead to inconsistent insights if used incorrectly. In an effort to reduce the barrier to obtaining business metrics, I've designed a web interface that allows users to ask business questions in plain English instead of writing SQL by hand.
 
 ## An Overview of the Mechanics:
-A natural-language question is grounded against a vector store of metric/schema definitions, turned into SQL by Claude, validated by parsing its AST (not string matching), and executed read-only against DuckDB. If the generated SQL fails validation, the error is fed back to the model for a retry. If the question can't be answered from the metrics that are actually defined, the agent says so instead of guessing.
+1. **You ask a question** in plain English (E.g. "What was our churn rate in APAC last month?") and a text-to-SQL agent takes it from there.
+2. **The agent figures out what it needs.** Using vector search over a semantic layer of approved metric and schema definitions (ChromaDB), it retrieves the specific definitions your question is actually about.
+3. **It writes a query.** An LLM (Claude) translates your question into SQL, using only those approved definitions — never guessing at table names or inventing its own logic.
+4. **The query gets validated before it ever runs.** Every generated query is parsed into an abstract syntax tree (AST validation via sqlglot, not string-matching) to confirm it's read-only and touches only approved data. If something's off, the agent gets the error back and retries automatically.
+5. **You get your answer.** The validated query runs read-only against DuckDB, an in-process analytical database, and you see the result. For ratio metrics, you'll also see a confidence interval (Delta Method, validated with Monte Carlo simulation) instead of a falsely precise single number, and you can request a plain-English summary — generated separately from the query itself, so it can't introduce new SQL logic.
+
+If your question is about something that isn't tracked yet, the agent declines directly instead of guessing.
 
 ## How it works
 

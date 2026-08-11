@@ -40,19 +40,29 @@ app = FastAPI(
 
 # --- Abuse protection for /ask ---------------------------------------------
 # Every request triggers a real, billed Claude API call, so an internet-facing
-# deployment needs *some* guardrail. Two layers, both free and dependency-free:
+# deployment needs *some* guardrail. Three layers, all free and dependency-free:
 #
-# 1. Optional shared API key (ASK_API_KEY env var). Unset by default so local
-#    dev/tests are unaffected; set it before deploying anywhere public.
+# 1. Optional shared API key (ASK_API_KEY env var). Unset by default (and by
+#    the deployed public UI, which has no field for one) so anyone can use the
+#    site; set it if you ever want to gate access behind a shared secret again.
 # 2. An in-memory sliding-window rate limit per client (the API key if one is
-#    configured, else the caller's IP). In-memory is fine for a single-instance
-#    deployment (e.g. Render's free tier); it resets on restart, which is an
-#    acceptable tradeoff for a demo, not a production multi-instance service.
+#    configured, else the caller's IP) -- bounds how fast any single visitor
+#    can spend.
+# 3. A global sliding-window cap shared across every client -- bounds total
+#    spend for the whole deployment regardless of how requests are
+#    distributed across IPs, which per-client limiting alone can't do once the
+#    site has no per-user gate. Tune GLOBAL_RATE_LIMIT_MAX_REQUESTS to taste.
+# All in-memory, so fine for a single-instance deployment (e.g. Render's free
+# tier); state resets on restart, an acceptable tradeoff for a demo, not a
+# production multi-instance service.
 API_KEY_ENV_VAR = "ASK_API_KEY"
 RATE_LIMIT_MAX_REQUESTS = 10
 RATE_LIMIT_WINDOW_SECONDS = 60
+GLOBAL_RATE_LIMIT_MAX_REQUESTS = 100
+GLOBAL_RATE_LIMIT_WINDOW_SECONDS = 24 * 60 * 60
 
 _request_log: Dict[str, "deque[float]"] = defaultdict(deque)
+_global_request_log: "deque[float]" = deque()
 
 
 def _check_rate_limit(client_id: str) -> None:
@@ -68,8 +78,25 @@ def _check_rate_limit(client_id: str) -> None:
     log.append(now)
 
 
+def _check_global_rate_limit() -> None:
+    now = time.monotonic()
+    while _global_request_log and now - _global_request_log[0] > GLOBAL_RATE_LIMIT_WINDOW_SECONDS:
+        _global_request_log.popleft()
+    if len(_global_request_log) >= GLOBAL_RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"This deployment has reached its cap of {GLOBAL_RATE_LIMIT_MAX_REQUESTS} "
+                f"requests per {GLOBAL_RATE_LIMIT_WINDOW_SECONDS}s. Please try again later."
+            ),
+        )
+    _global_request_log.append(now)
+
+
 def enforce_abuse_protection(request: Request, x_api_key: Optional[str] = Header(default=None)) -> None:
-    """FastAPI dependency: require ASK_API_KEY (if configured), then rate-limit."""
+    """FastAPI dependency: enforce the global spend cap, then ASK_API_KEY (if configured), then per-client rate limit."""
+    _check_global_rate_limit()
+
     expected_key = os.environ.get(API_KEY_ENV_VAR)
     if expected_key:
         if x_api_key != expected_key:
@@ -288,6 +315,7 @@ _INDEX_HTML = """<!doctype html>
     font-family: var(--mono); font-size: 0.82rem; color: var(--text); margin: 0;
     white-space: pre-wrap; word-break: break-word; line-height: 1.55;
   }
+  .chart-wrap { position: relative; height: 260px; margin-top: 2px; }
   table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; font-family: var(--mono); font-size: 0.85rem; }
   th, td { text-align: left; padding: 5px 8px 5px 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
   th { color: var(--text-dim); font-family: var(--sans); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.01em; }
@@ -322,9 +350,6 @@ _INDEX_HTML = """<!doctype html>
 <div class="scope-panel">__SCOPE_PANEL__</div>
 
 <div class="card">
-  <label for="apiKey">API key</label>
-  <input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off">
-
   <label for="question">Question</label>
   <textarea id="question" placeholder="What is the ARM for Basic plans in the US?"></textarea>
 
@@ -341,11 +366,8 @@ _INDEX_HTML = """<!doctype html>
 
 <div id="result"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
-const apiKeyInput = document.getElementById('apiKey');
-apiKeyInput.value = localStorage.getItem('askApiKey') || '';
-apiKeyInput.addEventListener('input', () => localStorage.setItem('askApiKey', apiKeyInput.value));
-
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -359,6 +381,73 @@ document.querySelectorAll('.example-chip').forEach(function (chip) {
     questionField.focus();
   });
 });
+
+let activeChart = null;
+
+function detectChartSpec(columns, rows) {
+  // Only a single dimension + a single measure is unambiguous enough to
+  // chart automatically -- anything else (multi-dimension breakdowns,
+  // single-value answers) stays table-only rather than guessing.
+  if (columns.length !== 2 || rows.length < 2) return null;
+
+  const [colA, colB] = columns;
+  const aIsNumeric = rows.every(function (r) { return typeof r[colA] === 'number'; });
+  const bIsNumeric = rows.every(function (r) { return typeof r[colB] === 'number'; });
+
+  let dimCol, measureCol;
+  if (!aIsNumeric && bIsNumeric) { dimCol = colA; measureCol = colB; }
+  else if (aIsNumeric && !bIsNumeric) { dimCol = colB; measureCol = colA; }
+  else return null;
+
+  return { dimCol: dimCol, measureCol: measureCol, isTimeSeries: dimCol === 'metric_month' };
+}
+
+function renderChart(canvas, spec, rows) {
+  const styles = getComputedStyle(document.body);
+  const accent = styles.getPropertyValue('--accent').trim();
+  const textDim = styles.getPropertyValue('--text-dim').trim();
+  const rule = styles.getPropertyValue('--rule').trim();
+  const sansFont = styles.getPropertyValue('--sans').trim();
+
+  const sorted = rows.slice();
+  if (spec.isTimeSeries) {
+    sorted.sort(function (a, b) { return String(a[spec.dimCol]).localeCompare(String(b[spec.dimCol])); });
+  } else {
+    sorted.sort(function (a, b) { return b[spec.measureCol] - a[spec.measureCol]; });
+  }
+
+  const labels = sorted.map(function (r) { return String(r[spec.dimCol]); });
+  const values = sorted.map(function (r) { return r[spec.measureCol]; });
+
+  if (activeChart) { activeChart.destroy(); }
+  activeChart = new Chart(canvas, {
+    type: spec.isTimeSeries ? 'line' : 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: spec.measureCol,
+        data: values,
+        backgroundColor: spec.isTimeSeries ? 'transparent' : accent,
+        borderColor: accent,
+        borderWidth: spec.isTimeSeries ? 2 : 0,
+        borderRadius: spec.isTimeSeries ? 0 : 4,
+        tension: 0.25,
+        pointBackgroundColor: accent,
+        pointRadius: spec.isTimeSeries ? 3 : 0,
+      }],
+    },
+    options: {
+      indexAxis: spec.isTimeSeries ? 'x' : 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: rule }, ticks: { color: textDim, font: { family: sansFont } } },
+        y: { grid: { color: rule }, ticks: { color: textDim, font: { family: sansFont } } },
+      },
+    },
+  });
+}
 
 function renderCiBar(ci) {
   const pad = (ci.upper - ci.lower) * 0.5 || Math.abs(ci.estimate) * 0.05 || 1;
@@ -391,19 +480,22 @@ document.getElementById('askButton').addEventListener('click', async () => {
   button.disabled = true;
   resultEl.innerHTML = '<p class="status-text">Running... (first request after idle can take up to a minute)</p>';
 
+  if (activeChart) { activeChart.destroy(); activeChart = null; }
+
   try {
     const response = await fetch('/ask', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKeyInput.value },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: question, summarize: true }),
     });
 
     if (response.status === 401) {
-      resultEl.innerHTML = '<p class="status-text error">Invalid or missing API key.</p>';
+      resultEl.innerHTML = '<p class="status-text error">This deployment requires an API key that this page has no way to provide. Ask the site owner to unset ASK_API_KEY.</p>';
       return;
     }
     if (response.status === 429) {
-      resultEl.innerHTML = '<p class="status-text error">Rate limit exceeded. Try again shortly.</p>';
+      const body = await response.json().catch(function () { return {}; });
+      resultEl.innerHTML = '<p class="status-text error">' + escapeHtml(body.detail || 'Rate limit exceeded. Try again shortly.') + '</p>';
       return;
     }
     if (!response.ok) {
@@ -428,8 +520,19 @@ document.getElementById('askButton').addEventListener('click', async () => {
       + '<pre>' + escapeHtml(data.sql) + '</pre>'
       + '</div>';
 
+    let chartSpec = null;
+
     if (data.rows && data.rows.length) {
       const columns = Object.keys(data.rows[0]);
+      chartSpec = detectChartSpec(columns, data.rows);
+
+      if (chartSpec) {
+        rows += '<div class="readout-row">'
+          + '<div class="row-head"><span class="row-label">Chart</span></div>'
+          + '<div class="chart-wrap"><canvas id="resultChart"></canvas></div>'
+          + '</div>';
+      }
+
       const shown = data.rows.slice(0, 50);
       rows += '<div class="readout-row">'
         + '<div class="row-head"><span class="row-label">Result</span><span class="chip">' + data.row_count + ' row(s)</span></div>'
@@ -462,6 +565,10 @@ document.getElementById('askButton').addEventListener('click', async () => {
     }
 
     resultEl.innerHTML = '<div class="readout">' + rows + '</div>';
+
+    if (chartSpec) {
+      renderChart(document.getElementById('resultChart'), chartSpec, data.rows);
+    }
   } catch (err) {
     resultEl.innerHTML = '<p class="status-text error">Network error: ' + escapeHtml(String(err)) + '</p>';
   } finally {

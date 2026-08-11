@@ -1,9 +1,19 @@
+import time
 import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.api import API_KEY_ENV_VAR, RATE_LIMIT_MAX_REQUESTS, _build_scope_html, _request_log, app, get_llm_client
+from app.api import (
+    API_KEY_ENV_VAR,
+    GLOBAL_RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_MAX_REQUESTS,
+    _build_scope_html,
+    _global_request_log,
+    _request_log,
+    app,
+    get_llm_client,
+)
 from app.services.query_execution import DB_PATH
 from app.services.semantic_view_registry import ALLOWED_VIEWS
 from app.services.vector_store import get_collection
@@ -41,10 +51,12 @@ class ApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
         _request_log.clear()
+        _global_request_log.clear()
 
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
         _request_log.clear()
+        _global_request_log.clear()
 
     def test_health_check(self) -> None:
         response = self.client.get("/health")
@@ -216,6 +228,25 @@ class ApiTests(unittest.TestCase):
 
         one_too_many = self.client.post("/ask", json={"question": "What is our ARM?"})
         self.assertEqual(one_too_many.status_code, 429)
+
+    def test_global_rate_limit_blocks_after_max_requests_across_the_deployment(self) -> None:
+        # Distinct from the per-client limiter above -- this caps total spend
+        # across every visitor, which matters once the site has no per-user
+        # key gating who can ask. Pre-fill the global log directly rather
+        # than sending GLOBAL_RATE_LIMIT_MAX_REQUESTS real requests from one
+        # client, since that would trip the (much lower) per-client limit
+        # first and test the wrong thing.
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
+        now = time.monotonic()
+        for _ in range(GLOBAL_RATE_LIMIT_MAX_REQUESTS - 1):
+            _global_request_log.append(now)
+
+        response = self.client.post("/ask", json={"question": "What is our ARM?"})
+        self.assertEqual(response.status_code, 200)
+
+        one_too_many = self.client.post("/ask", json={"question": "What is our ARM?"})
+        self.assertEqual(one_too_many.status_code, 429)
+        self.assertIn("cap", one_too_many.json()["detail"].lower())
 
     def test_health_check_is_never_rate_limited(self) -> None:
         for _ in range(RATE_LIMIT_MAX_REQUESTS + 5):

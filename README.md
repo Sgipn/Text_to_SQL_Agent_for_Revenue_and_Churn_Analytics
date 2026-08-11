@@ -174,7 +174,7 @@ tests/
 
 Beyond calling `answer_question()` directly (see the Example above), the agent is also reachable via:
 
-**Web UI** -- the API itself serves a minimal browser page at `/` (plain HTML/CSS/vanilla JS, inlined into `app/api.py`, no build step, no new dependency): a question box, an optional summarize checkbox, and an API key field (saved in the browser's `localStorage` so you only enter it once). Open `http://127.0.0.1:8000/` (or your deployed URL) after starting the API below.
+**Web UI** -- the API itself serves a minimal browser page at `/` (plain HTML/CSS/vanilla JS, inlined into `app/api.py`, no build step, no new dependency): a question box that auto-generates a summary and, where the result shape supports it, a chart alongside the table. Open `http://127.0.0.1:8000/` (or your deployed URL) after starting the API below. No API key is required from the page itself -- `ASK_API_KEY` is an optional server-side gate (see Deployment) with a global request cap as a cost backstop when it's left unset.
 
 **CLI** -- installed as a console script by `pip install -e .`:
 ```

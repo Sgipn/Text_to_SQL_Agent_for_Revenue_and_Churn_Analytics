@@ -12,7 +12,7 @@ VALID_ARM_SQL = (
     "FROM semantic_views.fct_monthly_subscriber_revenue\n"
     "```"
 )
-NO_QUERY_RESPONSE = "NO_QUERY: Churn rate is not a metric defined in the available semantic view."
+NO_QUERY_RESPONSE = "NO_QUERY: Net Promoter Score is not a metric defined in the available semantic view."
 
 
 class FakeLLMClient:
@@ -51,12 +51,12 @@ class CliTests(unittest.TestCase):
         client = FakeLLMClient([NO_QUERY_RESPONSE])
         buf = io.StringIO()
         with redirect_stdout(buf):
-            exit_code = main(["What is our churn rate?"], llm_client=client)
+            exit_code = main(["What is our Net Promoter Score?"], llm_client=client)
 
         output = buf.getvalue()
         self.assertEqual(exit_code, 1)
         self.assertIn("Could not answer this question", output)
-        self.assertIn("Churn rate", output)
+        self.assertIn("Net Promoter Score", output)
 
     def test_prints_confidence_interval_for_ratio_metric_question(self) -> None:
         client = FakeLLMClient([VALID_ARM_SQL])

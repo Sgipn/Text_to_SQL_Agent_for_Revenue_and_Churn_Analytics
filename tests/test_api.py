@@ -12,7 +12,7 @@ VALID_ARM_SQL = (
     "FROM semantic_views.fct_monthly_subscriber_revenue\n"
     "```"
 )
-NO_QUERY_RESPONSE = "NO_QUERY: Churn rate is not a metric defined in the available semantic view."
+NO_QUERY_RESPONSE = "NO_QUERY: Net Promoter Score is not a metric defined in the available semantic view."
 DESTRUCTIVE_SQL = "```sql\nDROP TABLE semantic_views.fct_monthly_subscriber_revenue\n```"
 
 
@@ -87,14 +87,14 @@ class ApiTests(unittest.TestCase):
     def test_ask_returns_decline_reason_without_sql(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([NO_QUERY_RESPONSE])
 
-        response = self.client.post("/ask", json={"question": "What is our churn rate?"})
+        response = self.client.post("/ask", json={"question": "What is our Net Promoter Score?"})
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertFalse(body["succeeded"])
         self.assertIsNone(body["sql"])
         self.assertIsNone(body["rows"])
-        self.assertIn("Churn rate", body["error"])
+        self.assertIn("Net Promoter Score", body["error"])
 
     def test_ask_blocks_destructive_generated_sql(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([DESTRUCTIVE_SQL, DESTRUCTIVE_SQL])

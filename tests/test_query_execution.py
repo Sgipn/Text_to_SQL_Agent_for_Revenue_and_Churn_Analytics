@@ -16,6 +16,24 @@ class QueryExecutionTests(unittest.TestCase):
             {"metric_month", "region_id", "plan_type", "active_paid_subscribers", "total_net_revenue"},
         )
 
+    def test_executes_safe_select_against_growth_view(self) -> None:
+        result = execute_safe_query("SELECT * FROM semantic_views.fct_monthly_subscriber_activity")
+        self.assertGreater(len(result), 0)
+        self.assertEqual(
+            set(result.columns),
+            {"metric_month", "region_id", "active_subscribers", "new_subscribers", "churned_subscribers"},
+        )
+
+    def test_churn_never_counted_in_the_final_month_of_data(self) -> None:
+        # The final period is right-censored -- a still-active user isn't a
+        # churn event just because the dataset ends.
+        result = execute_safe_query(
+            "SELECT SUM(churned_subscribers) AS total_churned "
+            "FROM semantic_views.fct_monthly_subscriber_activity "
+            "WHERE metric_month = (SELECT MAX(metric_month) FROM semantic_views.fct_monthly_subscriber_activity)"
+        )
+        self.assertEqual(result["total_churned"].iloc[0], 0)
+
     def test_raises_and_does_not_execute_unsafe_query(self) -> None:
         with self.assertRaises(UnsafeQueryError):
             execute_safe_query("DROP TABLE semantic_views.fct_monthly_subscriber_revenue")

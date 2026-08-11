@@ -1,0 +1,57 @@
+version: 2
+
+semantic_models:
+  - name: fct_monthly_subscriber_activity
+    model: ref('fct_monthly_subscriber_activity')
+    description: "Granular monthly subscriber growth and churn counts by region."
+    defaults:
+      agg_time_dimension: metric_month
+    entities:
+      - name: monthly_subscriber_activity
+        type: primary
+    dimensions:
+      - name: metric_month
+        type: time
+        type_params:
+          time_granularity: month
+      - name: region_id
+        type: categorical
+    measures:
+      - name: active_subscribers
+        agg: sum
+        expr: active_subscribers
+      - name: new_subscribers
+        agg: sum
+        expr: new_subscribers
+      - name: churned_subscribers
+        agg: sum
+        expr: churned_subscribers
+
+metrics:
+  - name: active_subscribers
+    label: "Active Subscribers"
+    type: simple
+    type_params:
+      measure: active_subscribers
+
+  - name: new_subscribers
+    label: "New Subscribers"
+    type: simple
+    type_params:
+      measure: new_subscribers
+    description: "Count of users whose first-ever billing period starts in the selected window (signups)."
+
+  - name: churned_subscribers
+    label: "Churned Subscribers"
+    type: simple
+    type_params:
+      measure: churned_subscribers
+    description: "Count of users whose last-ever billing period ends in the selected window, excluding still-active (right-censored) users."
+
+  - name: monthly_churn_rate
+    label: "Monthly Churn Rate"
+    type: ratio
+    type_params:
+      numerator: churned_subscribers
+      denominator: active_subscribers
+    description: "Ratio of churned subscribers divided by active subscribers over a selected temporal window."

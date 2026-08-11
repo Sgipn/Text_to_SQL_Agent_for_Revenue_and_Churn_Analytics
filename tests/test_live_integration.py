@@ -48,11 +48,25 @@ class LiveTextToSqlIntegrationTests(unittest.TestCase):
         self.assertIn("semantic_views.fct_monthly_subscriber_revenue", result.sql.lower())
 
     def test_declines_rather_than_inventing_an_undefined_metric(self) -> None:
-        result = answer_question("What is our churn rate this year?")
+        result = answer_question("What is our Net Promoter Score this year?")
 
         self.assertFalse(result.succeeded)
         self.assertIsNone(result.sql)
         self.assertIsNotNone(result.error)
+
+    def test_computes_churn_rate_as_ratio_of_sums_with_confidence_interval(self) -> None:
+        # Phase 12 added a real churn_rate metric -- this question used to
+        # correctly decline (see the NPS test above for the still-undefined
+        # case); confirms it's now answerable, using the same ratio-of-sums
+        # discipline as ARM, and that the CI machinery generalizes to it.
+        result = answer_question("What was our monthly churn rate in APAC?")
+
+        self.assertTrue(result.succeeded, msg=result.error)
+        sql_lower = result.sql.lower()
+        self.assertIn("semantic_views.fct_monthly_subscriber_activity", sql_lower)
+        self.assertIn("sum(", sql_lower)
+        self.assertNotIn("avg(", sql_lower)
+        self.assertIsNotNone(result.confidence_interval)
 
     def test_never_mutates_data_even_when_asked_to_delete(self) -> None:
         result = answer_question("Delete all revenue records for LATAM")

@@ -19,7 +19,7 @@ REVENUE_BY_REGION_SQL = (
 )
 UNAPPROVED_TABLE_SQL = "```sql\nSELECT * FROM users\n```"
 DESTRUCTIVE_SQL = "```sql\nDROP TABLE semantic_views.fct_monthly_subscriber_revenue\n```"
-NO_QUERY_RESPONSE = "NO_QUERY: Churn rate is not a metric defined in the available semantic view."
+NO_QUERY_RESPONSE = "NO_QUERY: Net Promoter Score is not a metric defined in the available semantic view."
 
 
 class FakeLLMClient:
@@ -95,13 +95,13 @@ class TextToSqlAgentTests(unittest.TestCase):
 
     def test_declines_immediately_for_unsupported_metric_without_retrying(self) -> None:
         client = FakeLLMClient([NO_QUERY_RESPONSE])
-        result = answer_question("What is our churn rate?", llm_client=client, max_attempts=2)
+        result = answer_question("What is our Net Promoter Score?", llm_client=client, max_attempts=2)
 
         self.assertFalse(result.succeeded)
         self.assertIsNone(result.sql)
         self.assertIsNone(result.result)
         self.assertEqual(result.attempts, 1)
-        self.assertIn("churn rate", result.error.lower())
+        self.assertIn("net promoter score", result.error.lower())
         self.assertEqual(len(client.calls), 1)  # no wasted retry on a deliberate decline
 
     def test_blocks_destructive_generated_sql_and_never_executes_it(self) -> None:

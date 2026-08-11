@@ -10,4 +10,5 @@ from __future__ import annotations
 
 ALLOWED_VIEWS: dict[str, str] = {
     "fct_monthly_subscriber_revenue": "semantic_views",
+    "fct_monthly_subscriber_activity": "semantic_views",
 }

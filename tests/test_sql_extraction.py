@@ -25,10 +25,12 @@ class ParseLlmResponseTests(unittest.TestCase):
 
     def test_parses_no_query_decline(self) -> None:
         sql, decline_reason = parse_llm_response(
-            "NO_QUERY: Churn rate is not a metric defined in the available semantic view."
+            "NO_QUERY: Net Promoter Score is not a metric defined in the available semantic view."
         )
         self.assertIsNone(sql)
-        self.assertEqual(decline_reason, "Churn rate is not a metric defined in the available semantic view.")
+        self.assertEqual(
+            decline_reason, "Net Promoter Score is not a metric defined in the available semantic view."
+        )
 
 
 if __name__ == "__main__":

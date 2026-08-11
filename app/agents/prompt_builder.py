@@ -11,7 +11,7 @@ Rules, no exceptions:
 - Write exactly one SQL SELECT statement. Never write DROP, INSERT, UPDATE, DELETE, or any other statement type.
 - Only reference these approved semantic views, using their exact "schema.table" name: {allowed_views}
 - Ratio metrics (like Average Revenue per Membership) are non-additive. Always compute them as SUM(numerator) / SUM(denominator) over the relevant rows -- never AVG() a per-row ratio, and never average monthly ratio values to get a quarterly one.
-- If the question cannot be answered from the views and metrics listed below (e.g. it asks for a metric that isn't defined here, like churn or LTV), do not invent a workaround query. Respond with exactly: NO_QUERY: <one sentence explaining what's missing>. Do not use a code fence in that case.
+- If the question cannot be answered from the views and metrics listed below (e.g. it asks for a metric that isn't defined here, like LTV or Net Promoter Score), do not invent a workaround query. Respond with exactly: NO_QUERY: <one sentence explaining what's missing>. Do not use a code fence in that case.
 - Otherwise, respond with only the SQL query, inside a single ```sql code fence. No explanation before or after.
 
 Relevant schema and metric context for this question:

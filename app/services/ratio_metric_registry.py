@@ -26,4 +26,10 @@ RATIO_METRICS: dict[str, RatioMetric] = {
         table="semantic_views.fct_monthly_subscriber_revenue",
         time_column="metric_month",
     ),
+    "monthly_churn_rate": RatioMetric(
+        numerator="churned_subscribers",
+        denominator="active_subscribers",
+        table="semantic_views.fct_monthly_subscriber_activity",
+        time_column="metric_month",
+    ),
 }

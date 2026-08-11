@@ -7,13 +7,15 @@ semantic_models:
     defaults:
       agg_time_dimension: metric_month
     entities:
-      - name: region_id
+      - name: monthly_subscriber_revenue
         type: primary
     dimensions:
       - name: metric_month
         type: time
         type_params:
           time_granularity: month
+      - name: region_id
+        type: categorical
       - name: plan_type
         type: categorical
     measures:

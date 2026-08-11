@@ -50,7 +50,7 @@ Result:
 | LATAM | 1246.34 |
 | US | 2754.41 |
 
-Ask something the semantic layer doesn't define (e.g. "What is our churn rate?") and the agent declines with a specific reason instead of inventing a query for it.
+Ask something the semantic layer doesn't define (e.g. "What is our Net Promoter Score?") and the agent declines with a specific reason instead of inventing a query for it.
 
 ## Safety design
 
@@ -63,11 +63,16 @@ The approved views also live in a physically separate `semantic_views` schema in
 
 ## Metric design
 
-`average_revenue_per_membership` (ARM) is defined as a `ratio` metric in dbt/MetricFlow: `SUM(total_net_revenue) / SUM(active_paid_subscribers)`. ARM is never stored as a pre-computed per-row column, because it's non-additive -- averaging monthly ARM values does not equal quarterly ARM. The agent's system prompt enforces the same rule on generated SQL.
+Two semantic views cover two domains, each with its own approved view, metrics, and retrieval documents:
+
+- **Revenue** (`fct_monthly_subscriber_revenue`): `average_revenue_per_membership` (ARM), a `ratio` metric: `SUM(total_net_revenue) / SUM(active_paid_subscribers)`.
+- **Growth** (`fct_monthly_subscriber_activity`): `monthly_churn_rate`, a `ratio` metric: `SUM(churned_subscribers) / SUM(active_subscribers)`. A user still active at the data cutoff is right-censored, not counted as churned.
+
+Both ratio metrics are never stored as a pre-computed per-row column, because they're non-additive -- averaging monthly values does not equal the quarterly value. The agent's system prompt enforces the same rule on generated SQL, and both metrics are registered generically in `app/services/ratio_metric_registry.py`, so the Delta Method confidence-interval machinery (below) applies to either without any metric-specific code.
 
 ### Confidence intervals
 
-Because ARM is a ratio of two random variables, its sampling distribution is non-linear -- `Var(R)` and `Var(S)` alone don't give `Var(R/S)`. When a generated query's SELECT list references both of a ratio metric's columns (filtering on them doesn't count -- see below), `app/services/metric_statistics.py` computes a confidence interval via the Delta Method (a first-order Taylor expansion), treating each period in a companion breakdown query -- grouped by month, reusing the original query's `WHERE` filter -- as an independent sampling unit:
+Because ARM is a ratio of two random variables, its sampling distribution is non-linear -- `Var(R)` and `Var(S)` alone don't give `Var(R/S)`. `app/services/metric_statistics.py` computes a confidence interval via the Delta Method (a first-order Taylor expansion) whenever a generated query's SELECT list computes both of a ratio metric's columns (e.g. `SUM(total_net_revenue) / SUM(active_paid_subscribers)`). Detection is based on what the query actually selects, not two easier-seeming proxies that turned out to be wrong: not retrieval rank (an earlier version gated on the metric's own doc ranking #1 in retrieval, which live testing showed wasn't reliable -- a question naming specific dimension values can rank the schema doc higher), and not WHERE-clause filtering (a query that merely filters on both columns without computing anything from them isn't "about" the ratio metric). The interval itself comes from a companion breakdown query -- grouped by month, reusing the original query's `WHERE` filter -- treating each period as an independent sampling unit:
 
 ```
 Var(R_bar/S_bar) ~= (1/mu_S^2)Var(R_bar) + (mu_R^2/mu_S^4)Var(S_bar) - 2(mu_R/mu_S^3)Cov(R_bar,S_bar)
@@ -107,7 +112,8 @@ app/
 data/raw/     # synthetic subscription billing data (checked in for reproducibility)
 dbt/
   models/staging/        # raw -> typed staging model
-  models/marts/finance/  # the approved semantic view + metric definitions
+  models/marts/finance/  # revenue semantic view + metric definitions
+  models/marts/growth/   # subscriber growth/churn semantic view + metric definitions
   models/metricflow_time_spine.sql
 tests/
 ```
@@ -167,14 +173,22 @@ curl -X POST http://127.0.0.1:8000/ask \
   "question": "What is the ARM for Basic plans in the US?",
   "succeeded": true,
   "attempts": 1,
-  "sql": "SELECT SUM(total_net_revenue) / SUM(active_paid_subscribers) AS average_revenue_per_membership FROM semantic_views.fct_monthly_subscriber_revenue WHERE region_id = 'US' AND plan_type = 'Basic'",
+  "sql": "SELECT SUM(total_net_revenue) / SUM(active_paid_subscribers) AS average_revenue_per_membership FROM semantic_views.fct_monthly_subscriber_revenue WHERE plan_type = 'Basic' AND region_id = 'US'",
   "error": null,
-  "rows": [{"average_revenue_per_membership": 7.7579376257545265}],
-  "row_count": 1
+  "rows": [{"average_revenue_per_membership": 7.757937625754527}],
+  "row_count": 1,
+  "confidence_interval": {
+    "estimate": 7.7579376257545265,
+    "standard_error": 0.033656789940963695,
+    "lower": 7.688313251100877,
+    "upper": 7.827562000408176,
+    "n_units": 24,
+    "confidence_level": 0.95
+  }
 }
 ```
-`GET /health` is a plain liveness check. Interactive docs are available at `/docs` once the server is running.
+`confidence_interval` is `null` when the query isn't computing a defined ratio metric. `GET /health` is a plain liveness check. Interactive docs are available at `/docs` once the server is running.
 
 ## Roadmap
 
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log, including what's planned next: CI, a CLI/API demo surface, confidence intervals for ratio metrics, and further semantic-layer hardening.
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log. What's planned next: column-level query scope validation (today's safety layer checks table names, not column names) and natural-language result summarization.

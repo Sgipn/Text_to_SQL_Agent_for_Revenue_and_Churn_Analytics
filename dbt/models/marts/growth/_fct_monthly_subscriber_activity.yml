@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: fct_monthly_subscriber_activity
+    description: >
+      Approved semantic view for subscriber growth and churn, grouped by
+      month and region. Grain is one row per (metric_month, region_id).
+      Counts are additive and safe to SUM across rows; monthly churn rate
+      must be computed as a ratio of summed totals (churned_subscribers /
+      active_subscribers), never averaged directly, since it is a
+      non-additive ratio metric like ARM.
+    columns:
+      - name: metric_month
+        description: "First day of the month this row aggregates."
+      - name: region_id
+        description: "Subscriber billing region (US, EMEA, APAC, LATAM)."
+      - name: active_subscribers
+        description: >
+          Count of distinct users with any active billing period in this
+          month, paid or trial. Additive across months and regions.
+      - name: new_subscribers
+        description: >
+          Count of distinct users whose first-ever billing period starts in
+          this month (a signup/acquisition event). Additive across months
+          and regions.
+      - name: churned_subscribers
+        description: >
+          Count of distinct users whose last-ever billing period is in this
+          month, excluding the final month of the dataset -- a user still
+          active at the data cutoff is right-censored, not a churn event,
+          and is not counted here. Additive across months and regions.

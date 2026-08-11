@@ -41,6 +41,25 @@ class RetrievalTests(unittest.TestCase):
         for r in results:
             self.assertIn(r["text"], formatted)
 
+    def test_arm_question_does_not_surface_growth_domain_docs(self) -> None:
+        # Stress-tests disambiguation across the two semantic-view domains
+        # (revenue vs. growth/churn) added in Phase 12 -- with only one
+        # domain, top-k retrieval couldn't meaningfully fail this way.
+        results = retrieve_context(
+            "What is the Average Revenue per Membership for Premium plans?", top_k=3, collection=self.collection
+        )
+        retrieved_ids = {r["id"] for r in results}
+        self.assertIn("metric::average_revenue_per_membership", retrieved_ids)
+        self.assertNotIn("view::fct_monthly_subscriber_activity", retrieved_ids)
+        self.assertNotIn("metric::monthly_churn_rate", retrieved_ids)
+
+    def test_churn_question_does_not_surface_revenue_domain_docs(self) -> None:
+        results = retrieve_context("What is our monthly churn rate?", top_k=3, collection=self.collection)
+        retrieved_ids = {r["id"] for r in results}
+        self.assertIn("metric::monthly_churn_rate", retrieved_ids)
+        self.assertNotIn("view::fct_monthly_subscriber_revenue", retrieved_ids)
+        self.assertNotIn("metric::average_revenue_per_membership", retrieved_ids)
+
     def test_raises_on_empty_collection(self) -> None:
         empty_collection = self.client.get_or_create_collection("empty_for_test")
         with self.assertRaises(RuntimeError):

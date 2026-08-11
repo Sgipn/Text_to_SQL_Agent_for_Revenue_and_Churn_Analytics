@@ -1,4 +1,4 @@
-# Project 1 Implementation Plan
+# Text-to-SQL Implementation Plan
 
 ## 1. Foundation and setup
 - Create the project folder structure.
@@ -66,8 +66,11 @@
 - Audit and update prompt instructions, tests, and README text that used "churn" as the go-to example of an undefined metric, now that it's a real one (swapped to Net Promoter Score).
 
 ## 13. Column-level query scope validation
-- Extend SQL validation to check that only documented columns for each approved view are referenced.
-- Add adversarial tests for column-level violations, e.g. a column that doesn't exist on the approved view.
+- Extend the semantic-view registry to carry each approved view's documented column set (not just its schema), and extend SQL validation to reject any referenced column not on one of the tables actually named in the query -- checked empirically against sqlglot's AST before deciding the approach, not assumed.
+- Exclude the query's own SELECT-list aliases from that check (recursing into subqueries too) -- `ORDER BY arm` after `SUM(...) AS arm` parses identically to a real column reference, and without this exclusion the project's own existing ARM queries would have started failing their own new validation.
+- Add adversarial tests for column-level violations: a hallucinated column, one only valid in a WHERE clause, and (now that Phase 12 added a second mart) a column that's real on the *other* approved view but not the one referenced.
+- Extend the registry drift test to check documented columns against the manifest, not just schema/tags. Live-test a batch of representative questions end to end to confirm the stricter check doesn't cause false-positive retries against real Claude-generated SQL.
+- Caught on review: matching was case-sensitive (table/schema and column names), but sqlglot preserves whatever case a query is written in while DuckDB folds unquoted identifiers case-insensitively -- a semantically valid, differently-cased query (e.g. `Total_Net_Revenue`) would have been wrongly rejected. Fixed for both table/schema and column matching (the table-name gap predated this phase but lives in the same function). Added regression tests and re-verified end to end.
 
 ## 14. Natural-language result summarization
 - Add an optional step that summarizes a returned result set in a sentence or two, grounded only in the actual returned rows.

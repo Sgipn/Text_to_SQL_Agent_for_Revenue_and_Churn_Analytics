@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from app.services.semantic_view_registry import ALLOWED_VIEWS
+from app.services.semantic_view_registry import ALLOWED_VIEWS, SemanticView
 
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / "dbt" / "target" / "manifest.json"
 
@@ -14,13 +14,13 @@ class SemanticViewRegistryDriftTests(unittest.TestCase):
     before this test can check for drift.
     """
 
-    def test_registry_matches_dbt_semantic_view_tags(self) -> None:
+    def test_registry_matches_dbt_semantic_view_tags_and_columns(self) -> None:
         if not MANIFEST_PATH.exists():
             self.skipTest(f"dbt manifest not found at {MANIFEST_PATH}; run `dbt build` first")
 
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
         tagged_models = {
-            node["alias"]: node["schema"]
+            node["alias"]: SemanticView(schema=node["schema"], columns=frozenset(node.get("columns", {})))
             for node in manifest["nodes"].values()
             if node.get("resource_type") == "model" and "semantic_view" in node.get("tags", [])
         }
@@ -29,7 +29,8 @@ class SemanticViewRegistryDriftTests(unittest.TestCase):
             tagged_models,
             ALLOWED_VIEWS,
             "app/services/semantic_view_registry.py is out of sync with the dbt "
-            "models tagged 'semantic_view' -- update ALLOWED_VIEWS to match.",
+            "models tagged 'semantic_view' (schema or documented columns drifted) "
+            "-- update ALLOWED_VIEWS to match.",
         )
 
 

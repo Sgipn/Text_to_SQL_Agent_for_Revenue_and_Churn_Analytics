@@ -10,6 +10,7 @@ SYSTEM_PROMPT_TEMPLATE = """You are a text-to-SQL agent for a subscription analy
 Rules, no exceptions:
 - Write exactly one SQL SELECT statement. Never write DROP, INSERT, UPDATE, DELETE, or any other statement type.
 - Only reference these approved semantic views, using their exact "schema.table" name: {allowed_views}
+- Only reference columns documented in the retrieved schema context below. Do not invent column names.
 - Ratio metrics (like Average Revenue per Membership) are non-additive. Always compute them as SUM(numerator) / SUM(denominator) over the relevant rows -- never AVG() a per-row ratio, and never average monthly ratio values to get a quarterly one.
 - If the question cannot be answered from the views and metrics listed below (e.g. it asks for a metric that isn't defined here, like LTV or Net Promoter Score), do not invent a workaround query. Respond with exactly: NO_QUERY: <one sentence explaining what's missing>. Do not use a code fence in that case.
 - Otherwise, respond with only the SQL query, inside a single ```sql code fence. No explanation before or after.
@@ -30,7 +31,7 @@ Fix the query and respond again with only a single ```sql code fence."""
 
 
 def build_system_prompt(context_block: str) -> str:
-    allowed_views = ", ".join(f"{schema}.{table}" for table, schema in ALLOWED_VIEWS.items())
+    allowed_views = ", ".join(f"{view.schema}.{table}" for table, view in ALLOWED_VIEWS.items())
     return SYSTEM_PROMPT_TEMPLATE.format(allowed_views=allowed_views, context_block=context_block)
 
 

@@ -138,44 +138,94 @@ _INDEX_HTML = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Semantic Metric Repository</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; line-height: 1.5; }
-  h1 { font-size: 1.4rem; margin-bottom: 4px; }
-  .muted { color: #6b7280; font-size: 0.9rem; }
-  label { display: block; margin-top: 16px; font-weight: 600; font-size: 0.9rem; }
-  input[type=text], input[type=password], textarea {
-    width: 100%; box-sizing: border-box; padding: 8px; font-size: 1rem;
-    border: 1px solid #9ca3af; border-radius: 6px; margin-top: 4px; font-family: inherit;
+  :root {
+    --bg: #F1F3F5; --surface: #FFFFFF; --text: #1A2024; --text-dim: #667077;
+    --accent: #0E8A82; --accent-soft: #D9EEEC; --rule: #DDE2E5; --good: #2E9E5B; --error: #D14343;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
   }
-  textarea { min-height: 60px; resize: vertical; }
-  .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-  .row label { margin: 0; font-weight: normal; }
-  button { margin-top: 16px; padding: 10px 20px; font-size: 1rem; border-radius: 6px; border: none; background: #2563eb; color: white; cursor: pointer; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151A; --surface: #171E24; --text: #E6ECEF; --text-dim: #8B99A1;
+      --accent: #35C2B8; --accent-soft: #17403C; --rule: #263139; --good: #4CC479; --error: #E5726B;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    max-width: 740px; margin: 0 auto; padding: 40px 20px 64px; line-height: 1.5;
+  }
+  .wordmark { font-size: 1.05rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lede { font-family: var(--sans); color: var(--text-dim); font-size: 0.88rem; margin: 0 0 26px; max-width: 58ch; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+  label {
+    display: block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-dim); margin: 14px 0 6px;
+  }
+  label:first-child { margin-top: 0; }
+  input[type=password], textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--rule); border-radius: 4px;
+    color: var(--text); font-family: var(--sans); font-size: 0.9rem; padding: 8px 10px;
+  }
+  textarea { min-height: 52px; resize: vertical; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 0.84rem; color: var(--text-dim); }
+  .row label { margin: 0; font-weight: normal; text-transform: none; letter-spacing: normal; }
+  button {
+    margin-top: 18px; font-family: var(--sans); font-size: 0.85rem; font-weight: 700;
+    background: var(--accent); color: #ffffff; border: none; border-radius: 5px; padding: 9px 18px; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
   button:disabled { opacity: 0.5; cursor: default; }
-  pre { background: rgba(128,128,128,0.12); padding: 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-  table { border-collapse: collapse; width: 100%; margin-top: 8px; display: block; overflow-x: auto; }
-  th, td { border: 1px solid rgba(128,128,128,0.4); padding: 6px 10px; text-align: left; font-size: 0.9rem; white-space: nowrap; }
-  .error { color: #dc2626; font-weight: 600; }
-  #result { margin-top: 24px; }
-  #result h3 { margin-bottom: 4px; font-size: 1rem; }
+  .readout {
+    margin-top: 28px; display: flex; flex-direction: column; gap: 1px;
+    background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden;
+  }
+  .readout-row { background: var(--surface); padding: 14px 16px; }
+  .row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .row-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .chip {
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap;
+    color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent);
+    padding: 2px 8px; border-radius: 20px;
+  }
+  .chip.error-chip { color: var(--error); background: color-mix(in srgb, var(--error) 15%, transparent); }
+  pre {
+    font-family: var(--mono); font-size: 0.82rem; color: var(--text); margin: 0;
+    white-space: pre-wrap; word-break: break-word; line-height: 1.55;
+  }
+  table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; font-family: var(--mono); font-size: 0.85rem; }
+  th, td { text-align: left; padding: 5px 8px 5px 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th { color: var(--text-dim); font-family: var(--sans); font-weight: 600; text-transform: uppercase; font-size: 0.63rem; letter-spacing: 0.05em; }
+  .ci-bar-wrap { display: flex; align-items: center; gap: 10px; }
+  .ci-bar { position: relative; flex: 1; height: 5px; background: var(--rule); border-radius: 3px; }
+  .ci-bar-fill { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
+  .ci-bar-mark { position: absolute; top: -3px; width: 2px; height: 11px; background: var(--text); border-radius: 1px; }
+  .ci-num { font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ci-detail { margin: 8px 0 0; font-size: 0.78rem; color: var(--text-dim); font-family: var(--mono); }
+  .summary-text { margin: 0; font-size: 0.92rem; line-height: 1.6; color: var(--text); }
+  .status-text { color: var(--text-dim); font-size: 0.88rem; margin-top: 20px; }
+  .status-text.error { color: var(--error); font-weight: 600; }
 </style>
 </head>
 <body>
-<h1>Semantic Metric Repository</h1>
-<p class="muted">Ask a natural-language question about revenue or subscriber activity. Answers are grounded in an approved semantic layer -- generated SQL is validated before it ever touches the database.</p>
+<p class="wordmark">Semantic Metric Repository</p>
+<p class="lede">Ask a natural-language question about revenue or subscriber activity. Generated SQL is validated before it ever touches the database.</p>
 
-<label for="apiKey">API key</label>
-<input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off">
+<div class="card">
+  <label for="apiKey">API key</label>
+  <input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off">
 
-<label for="question">Question</label>
-<textarea id="question" placeholder="What is our Average Revenue per Membership?"></textarea>
+  <label for="question">Question</label>
+  <textarea id="question" placeholder="What is the ARM for Basic plans in the US?"></textarea>
 
-<div class="row">
-  <input type="checkbox" id="summarize">
-  <label for="summarize">Also generate a natural-language summary</label>
+  <div class="row">
+    <input type="checkbox" id="summarize">
+    <label for="summarize">Also generate a summary</label>
+  </div>
+
+  <button id="askButton">Run query</button>
 </div>
-
-<button id="askButton">Ask</button>
 
 <div id="result"></div>
 
@@ -190,6 +240,24 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function renderCiBar(ci) {
+  const pad = (ci.upper - ci.lower) * 0.5 || Math.abs(ci.estimate) * 0.05 || 1;
+  const domainMin = ci.lower - pad;
+  const domainMax = ci.upper + pad;
+  const span = domainMax - domainMin || 1;
+  const leftPct = ((ci.lower - domainMin) / span) * 100;
+  const rightPct = 100 - ((ci.upper - domainMin) / span) * 100;
+  const markPct = ((ci.estimate - domainMin) / span) * 100;
+  return '<div class="ci-bar-wrap">'
+    + '<span class="ci-num">' + ci.lower.toFixed(4) + '</span>'
+    + '<div class="ci-bar">'
+    + '<div class="ci-bar-fill" style="left:' + leftPct.toFixed(2) + '%;right:' + rightPct.toFixed(2) + '%;"></div>'
+    + '<div class="ci-bar-mark" style="left:' + markPct.toFixed(2) + '%;"></div>'
+    + '</div>'
+    + '<span class="ci-num">' + ci.upper.toFixed(4) + '</span>'
+    + '</div>';
+}
+
 document.getElementById('askButton').addEventListener('click', async () => {
   const question = document.getElementById('question').value.trim();
   const summarize = document.getElementById('summarize').checked;
@@ -197,12 +265,12 @@ document.getElementById('askButton').addEventListener('click', async () => {
   const button = document.getElementById('askButton');
 
   if (!question) {
-    resultEl.innerHTML = '<p class="error">Enter a question first.</p>';
+    resultEl.innerHTML = '<p class="status-text error">Enter a question first.</p>';
     return;
   }
 
   button.disabled = true;
-  resultEl.innerHTML = '<p class="muted">Asking... (first request after idle can take up to a minute)</p>';
+  resultEl.innerHTML = '<p class="status-text">Running... (first request after idle can take up to a minute)</p>';
 
   try {
     const response = await fetch('/ask', {
@@ -212,57 +280,71 @@ document.getElementById('askButton').addEventListener('click', async () => {
     });
 
     if (response.status === 401) {
-      resultEl.innerHTML = '<p class="error">Invalid or missing API key.</p>';
+      resultEl.innerHTML = '<p class="status-text error">Invalid or missing API key.</p>';
       return;
     }
     if (response.status === 429) {
-      resultEl.innerHTML = '<p class="error">Rate limit exceeded. Try again shortly.</p>';
+      resultEl.innerHTML = '<p class="status-text error">Rate limit exceeded. Try again shortly.</p>';
       return;
     }
     if (!response.ok) {
-      resultEl.innerHTML = '<p class="error">Request failed (HTTP ' + response.status + ').</p>';
+      resultEl.innerHTML = '<p class="status-text error">Request failed (HTTP ' + response.status + ').</p>';
       return;
     }
 
     const data = await response.json();
 
     if (!data.succeeded) {
-      resultEl.innerHTML = '<p class="error">Could not answer: ' + escapeHtml(data.error || 'unknown error') + '</p>';
+      resultEl.innerHTML = '<div class="readout"><div class="readout-row">'
+        + '<div class="row-head"><span class="row-label">Not answered</span><span class="chip error-chip">Declined</span></div>'
+        + '<p class="summary-text">' + escapeHtml(data.error || 'Unknown error') + '</p>'
+        + '</div></div>';
       return;
     }
 
-    let html = '';
-    html += '<p class="muted">' + data.attempts + ' attempt(s)</p>';
-    html += '<h3>SQL</h3><pre>' + escapeHtml(data.sql) + '</pre>';
+    let rows = '';
+
+    rows += '<div class="readout-row">'
+      + '<div class="row-head"><span class="row-label">Generated SQL</span><span class="chip">&#10003; Validated &middot; ' + data.attempts + ' attempt(s)</span></div>'
+      + '<pre>' + escapeHtml(data.sql) + '</pre>'
+      + '</div>';
 
     if (data.rows && data.rows.length) {
       const columns = Object.keys(data.rows[0]);
       const shown = data.rows.slice(0, 50);
-      html += '<h3>Result (' + data.row_count + ' rows)</h3>';
-      html += '<table><thead><tr>' + columns.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+      rows += '<div class="readout-row">'
+        + '<div class="row-head"><span class="row-label">Result</span><span class="chip">' + data.row_count + ' row(s)</span></div>'
+        + '<table><thead><tr>' + columns.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
       shown.forEach(function (row) {
-        html += '<tr>' + columns.map(function (c) { return '<td>' + escapeHtml(String(row[c])) + '</td>'; }).join('') + '</tr>';
+        rows += '<tr>' + columns.map(function (c) { return '<td>' + escapeHtml(String(row[c])) + '</td>'; }).join('') + '</tr>';
       });
-      html += '</tbody></table>';
+      rows += '</tbody></table>';
       if (data.row_count > 50) {
-        html += '<p class="muted">Showing first 50 of ' + data.row_count + ' rows.</p>';
+        rows += '<p class="ci-detail">Showing first 50 of ' + data.row_count + ' rows.</p>';
       }
+      rows += '</div>';
     }
 
     if (data.confidence_interval) {
       const ci = data.confidence_interval;
-      html += '<h3>' + Math.round(ci.confidence_level * 100) + '% Confidence Interval</h3><p>['
-        + ci.lower.toFixed(4) + ', ' + ci.upper.toFixed(4) + '] (estimate=' + ci.estimate.toFixed(4)
-        + ', se=' + ci.standard_error.toFixed(4) + ', n=' + ci.n_units + ')</p>';
+      rows += '<div class="readout-row">'
+        + '<div class="row-head"><span class="row-label">' + Math.round(ci.confidence_level * 100) + '% Confidence Interval</span>'
+        + '<span class="chip">n = ' + ci.n_units + '</span></div>'
+        + renderCiBar(ci)
+        + '<p class="ci-detail">estimate ' + ci.estimate.toFixed(4) + ' &middot; se ' + ci.standard_error.toFixed(4) + '</p>'
+        + '</div>';
     }
 
     if (data.summary) {
-      html += '<h3>Summary</h3><p>' + escapeHtml(data.summary) + '</p>';
+      rows += '<div class="readout-row">'
+        + '<div class="row-head"><span class="row-label">Summary</span></div>'
+        + '<p class="summary-text">' + escapeHtml(data.summary) + '</p>'
+        + '</div>';
     }
 
-    resultEl.innerHTML = html;
+    resultEl.innerHTML = '<div class="readout">' + rows + '</div>';
   } catch (err) {
-    resultEl.innerHTML = '<p class="error">Network error: ' + escapeHtml(String(err)) + '</p>';
+    resultEl.innerHTML = '<p class="status-text error">Network error: ' + escapeHtml(String(err)) + '</p>';
   } finally {
     button.disabled = false;
   }

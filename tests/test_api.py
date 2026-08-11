@@ -3,8 +3,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.api import API_KEY_ENV_VAR, RATE_LIMIT_MAX_REQUESTS, _request_log, app, get_llm_client
+from app.api import API_KEY_ENV_VAR, RATE_LIMIT_MAX_REQUESTS, _build_scope_html, _request_log, app, get_llm_client
 from app.services.query_execution import DB_PATH
+from app.services.semantic_view_registry import ALLOWED_VIEWS
 from app.services.vector_store import get_collection
 
 VALID_ARM_SQL = (
@@ -61,6 +62,16 @@ class ApiTests(unittest.TestCase):
         for _ in range(RATE_LIMIT_MAX_REQUESTS + 5):
             response = self.client.get("/")
             self.assertEqual(response.status_code, 200)
+
+    def test_index_page_scope_panel_lists_every_approved_view_and_ratio_metric(self) -> None:
+        # Sourced from the same registries that drive query validation --
+        # this fails if a future mart/metric is added without the page
+        # reflecting it, instead of silently going stale.
+        response = self.client.get("/")
+
+        self.assertNotIn("__SCOPE_PANEL__", response.text)
+        self.assertIn(_build_scope_html(), response.text)
+        self.assertEqual(response.text.count('class="scope-card"'), len(ALLOWED_VIEWS))
 
     def test_ask_returns_sql_and_json_safe_rows_on_success(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])

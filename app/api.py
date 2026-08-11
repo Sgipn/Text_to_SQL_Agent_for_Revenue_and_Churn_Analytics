@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from app.agents.llm_client import ClaudeLLMClient, LLMClient
 from app.agents.text_to_sql_agent import answer_question
+from app.services.ratio_metric_registry import RATIO_METRICS
+from app.services.semantic_view_registry import ALLOWED_VIEWS
 
 # Loaded eagerly at import time, not lazily inside the first LLM call (as
 # ClaudeLLMClient does for ANTHROPIC_API_KEY) -- ASK_API_KEY must be in
@@ -31,7 +33,7 @@ from app.agents.text_to_sql_agent import answer_question
 load_dotenv()
 
 app = FastAPI(
-    title="Semantic Metric Repository -- Text-to-SQL Agent",
+    title="Text-to-SQL Agent for Revenue and Churn Analytics",
     description="Ask a natural-language business question and get back validated, executed SQL.",
 )
 
@@ -131,12 +133,64 @@ def _dataframe_to_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return records
 
 
+# --- "What data is available" panel on the / page ---------------------------
+# Built at request time straight from the same registries that drive query
+# validation (semantic_view_registry.ALLOWED_VIEWS, ratio_metric_registry.
+# RATIO_METRICS), not hand-typed prose -- so it can't drift out of sync with
+# what the agent actually supports as fields or marts are added. Only the
+# display labels below are hand-curated (for readability); anything not
+# explicitly labeled falls back to a mechanical underscore-to-space transform.
+_DOMAIN_LABELS = {
+    "fct_monthly_subscriber_revenue": "Revenue",
+    "fct_monthly_subscriber_activity": "Growth",
+}
+_FIELD_LABELS = {
+    "metric_month": "month",
+    "region_id": "region",
+    "plan_type": "plan",
+    "active_paid_subscribers": "active paid subscribers",
+    "total_net_revenue": "total net revenue",
+    "active_subscribers": "active subscribers",
+    "new_subscribers": "new subscribers",
+    "churned_subscribers": "churned subscribers",
+}
+_METRIC_LABELS = {
+    "average_revenue_per_membership": "ARM (Average Revenue per Membership)",
+    "monthly_churn_rate": "monthly churn rate",
+}
+
+
+def _build_scope_html() -> str:
+    metrics_by_view: Dict[str, List[str]] = {}
+    for metric_name, ratio_metric in RATIO_METRICS.items():
+        view_name = ratio_metric.table.split(".")[-1]
+        metrics_by_view.setdefault(view_name, []).append(metric_name)
+
+    cards = []
+    for view_name, view in ALLOWED_VIEWS.items():
+        domain = _DOMAIN_LABELS.get(view_name, view_name)
+        fields = ", ".join(_FIELD_LABELS.get(c, c.replace("_", " ")) for c in sorted(view.columns))
+
+        metric_line = ""
+        metric_names = metrics_by_view.get(view_name)
+        if metric_names:
+            labels = ", ".join(_METRIC_LABELS.get(m, m.replace("_", " ")) for m in metric_names)
+            metric_line = '<p class="scope-metric">Metric: ' + labels + "</p>"
+
+        cards.append(
+            '<div class="scope-card">'
+            '<p class="scope-domain">' + domain + "</p>"
+            '<p class="scope-fields">' + fields + "</p>" + metric_line + "</div>"
+        )
+    return "".join(cards)
+
+
 _INDEX_HTML = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Semantic Metric Repository</title>
+<title>Text-to-SQL Agent for Revenue and Churn Analytics</title>
 <style>
   :root {
     --bg: #F1F3F5; --surface: #FFFFFF; --text: #1A2024; --text-dim: #667077;
@@ -206,11 +260,24 @@ _INDEX_HTML = """<!doctype html>
   .summary-text { margin: 0; font-size: 0.92rem; line-height: 1.6; color: var(--text); }
   .status-text { color: var(--text-dim); font-size: 0.88rem; margin-top: 20px; }
   .status-text.error { color: var(--error); font-weight: 600; }
+  .scope-panel { display: flex; gap: 12px; margin-bottom: 26px; flex-wrap: wrap; }
+  .scope-card { flex: 1 1 220px; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; }
+  .scope-domain { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin: 0 0 6px; }
+  .scope-fields { font-size: 0.82rem; color: var(--text-dim); margin: 0; line-height: 1.5; }
+  .scope-metric { font-size: 0.78rem; color: var(--text); margin: 8px 0 0; font-weight: 600; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .example-chip {
+    font-family: var(--sans); font-size: 0.78rem; color: var(--accent); background: var(--accent-soft);
+    border: none; border-radius: 20px; padding: 5px 12px; cursor: pointer; text-align: left; margin: 0;
+  }
+  .example-chip:hover { filter: brightness(1.06); }
 </style>
 </head>
 <body>
-<p class="wordmark">Semantic Metric Repository</p>
-<p class="lede">Ask a natural-language question about revenue or subscriber activity. Generated SQL is validated before it ever touches the database.</p>
+<p class="wordmark">Text-to-SQL Agent for Revenue and Churn Analytics</p>
+<p class="lede">Ask about <strong>revenue</strong> (by region, plan, or month) or <strong>subscriber growth and churn</strong> (by region or month). The exact fields available are listed below.</p>
+
+<div class="scope-panel">__SCOPE_PANEL__</div>
 
 <div class="card">
   <label for="apiKey">API key</label>
@@ -218,6 +285,13 @@ _INDEX_HTML = """<!doctype html>
 
   <label for="question">Question</label>
   <textarea id="question" placeholder="What is the ARM for Basic plans in the US?"></textarea>
+
+  <div class="examples">
+    <button type="button" class="example-chip" data-question="What is our ARM by region?">ARM by region</button>
+    <button type="button" class="example-chip" data-question="What was our monthly churn rate in APAC?">Churn rate in APAC</button>
+    <button type="button" class="example-chip" data-question="Show me revenue by plan type in Q2 2024">Revenue by plan, Q2 2024</button>
+    <button type="button" class="example-chip" data-question="Which region had the most new subscribers last quarter?">New subscribers by region</button>
+  </div>
 
   <div class="row">
     <input type="checkbox" id="summarize">
@@ -239,6 +313,14 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+document.querySelectorAll('.example-chip').forEach(function (chip) {
+  chip.addEventListener('click', function () {
+    const questionField = document.getElementById('question');
+    questionField.value = chip.dataset.question;
+    questionField.focus();
+  });
+});
 
 function renderCiBar(ci) {
   const pad = (ci.upper - ci.lower) * 0.5 || Math.abs(ci.estimate) * 0.05 || 1;
@@ -367,7 +449,8 @@ def index() -> HTMLResponse:
     file) so it's guaranteed to be found regardless of whether the app is
     imported from the source tree or an installed package -- a static asset
     file would need its own packaging config to be reliably included."""
-    return HTMLResponse(content=_INDEX_HTML)
+    html = _INDEX_HTML.replace("__SCOPE_PANEL__", _build_scope_html())
+    return HTMLResponse(content=html)
 
 
 @app.post("/ask", response_model=AskResponse, dependencies=[Depends(enforce_abuse_protection)])

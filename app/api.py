@@ -222,17 +222,21 @@ _INDEX_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Text-to-SQL Agent for Revenue and Churn Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #F1F3F5; --surface: #FFFFFF; --text: #1A2024; --text-dim: #667077;
-    --accent: #0E8A82; --accent-soft: #D9EEEC; --rule: #DDE2E5; --good: #2E9E5B; --error: #D14343;
-    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --bg: #D3D9D4; --surface: #FFFFFF; --text: #212A31; --text-dim: #4F6268;
+    --accent: #124E66; --accent-soft: #DCE7EA; --rule: #C4CCC7; --good: #2E9E5B; --error: #D14343;
+    --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+    --display: "Space Grotesk", var(--sans);
     --mono: ui-monospace, "SF Mono", Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #10151A; --surface: #171E24; --text: #E6ECEF; --text-dim: #8B99A1;
-      --accent: #35C2B8; --accent-soft: #17403C; --rule: #263139; --good: #4CC479; --error: #E5726B;
+      --bg: #212A31; --surface: #2E3944; --text: #D3D9D4; --text-dim: #93A2A8;
+      --accent: #3FA0C2; --accent-soft: #1B3C47; --rule: #3A454E; --good: #4CC479; --error: #E5726B;
     }
   }
   * { box-sizing: border-box; }
@@ -240,12 +244,12 @@ _INDEX_HTML = """<!doctype html>
     background: var(--bg); color: var(--text); font-family: var(--sans);
     max-width: 740px; margin: 0 auto; padding: 40px 20px 64px; line-height: 1.5;
   }
-  .wordmark { font-size: 1.05rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .wordmark { font-family: var(--display); font-size: 1.3rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; }
   .lede { font-family: var(--sans); color: var(--text-dim); font-size: 0.88rem; margin: 0 0 26px; max-width: 58ch; }
   .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
   label {
-    display: block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.05em; color: var(--text-dim); margin: 14px 0 6px;
+    display: block; font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.01em; color: var(--text-dim); margin: 14px 0 6px;
   }
   label:first-child { margin-top: 0; }
   input[type=password], textarea {
@@ -268,7 +272,7 @@ _INDEX_HTML = """<!doctype html>
   }
   .readout-row { background: var(--surface); padding: 14px 16px; }
   .row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-  .row-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .row-label { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.01em; color: var(--text-dim); }
   .chip {
     font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap;
     color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent);
@@ -281,7 +285,7 @@ _INDEX_HTML = """<!doctype html>
   }
   table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; font-family: var(--mono); font-size: 0.85rem; }
   th, td { text-align: left; padding: 5px 8px 5px 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  th { color: var(--text-dim); font-family: var(--sans); font-weight: 600; text-transform: uppercase; font-size: 0.63rem; letter-spacing: 0.05em; }
+  th { color: var(--text-dim); font-family: var(--sans); font-weight: 600; font-size: 0.72rem; letter-spacing: 0.01em; }
   .ci-bar-wrap { display: flex; align-items: center; gap: 10px; }
   .ci-bar { position: relative; flex: 1; height: 5px; background: var(--rule); border-radius: 3px; }
   .ci-bar-fill { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
@@ -293,7 +297,7 @@ _INDEX_HTML = """<!doctype html>
   .status-text.error { color: var(--error); font-weight: 600; }
   .scope-panel { display: flex; gap: 12px; margin-bottom: 26px; flex-wrap: wrap; }
   .scope-card { flex: 1 1 220px; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; }
-  .scope-domain { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin: 0 0 6px; }
+  .scope-domain { font-family: var(--display); font-size: 0.86rem; font-weight: 600; letter-spacing: 0; color: var(--accent); margin: 0 0 6px; }
   .scope-fields { font-size: 0.82rem; color: var(--text-dim); margin: 0; line-height: 1.5; }
   .scope-metric { font-size: 0.78rem; color: var(--text); margin: 8px 0 0; font-weight: 600; }
   .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0; }

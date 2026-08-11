@@ -140,10 +140,19 @@ def _dataframe_to_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
 # what the agent actually supports as fields or marts are added. Only the
 # display labels below are hand-curated (for readability); anything not
 # explicitly labeled falls back to a mechanical underscore-to-space transform.
+#
+# Fields are split into dimensions (what you filter/group by) and measures
+# (what you actually ask about), shown as separate cards -- region and month
+# used to be duplicated across both domain cards with no way to tell "how do
+# I slice this" from "what can I measure" apart. Called "dimensions", not
+# "identifiers": user_id is a true identifier in the raw data but is never
+# exposed in either approved view (users are always aggregated away), so
+# "identifier" would wrongly imply user-level lookup is possible.
 _DOMAIN_LABELS = {
     "fct_monthly_subscriber_revenue": "Revenue",
     "fct_monthly_subscriber_activity": "Growth",
 }
+_DIMENSION_FIELDS = {"metric_month", "region_id", "plan_type"}
 _FIELD_LABELS = {
     "metric_month": "month",
     "region_id": "region",
@@ -161,15 +170,37 @@ _METRIC_LABELS = {
 
 
 def _build_scope_html() -> str:
+    views_by_dimension: Dict[str, List[str]] = {}
+    for view_name, view in ALLOWED_VIEWS.items():
+        for column in view.columns:
+            if column in _DIMENSION_FIELDS:
+                views_by_dimension.setdefault(column, []).append(view_name)
+
+    dimension_terms = []
+    for column in sorted(views_by_dimension):
+        label = _FIELD_LABELS.get(column, column.replace("_", " "))
+        views_with_column = views_by_dimension[column]
+        if len(views_with_column) < len(ALLOWED_VIEWS):
+            only = ", ".join(_DOMAIN_LABELS.get(v, v) for v in views_with_column)
+            label += " (" + only + " only)"
+        dimension_terms.append(label)
+
+    cards = [
+        '<div class="scope-card">'
+        '<p class="scope-domain">Filter &amp; group by</p>'
+        '<p class="scope-fields">' + ", ".join(dimension_terms) + "</p>"
+        "</div>"
+    ]
+
     metrics_by_view: Dict[str, List[str]] = {}
     for metric_name, ratio_metric in RATIO_METRICS.items():
         view_name = ratio_metric.table.split(".")[-1]
         metrics_by_view.setdefault(view_name, []).append(metric_name)
 
-    cards = []
     for view_name, view in ALLOWED_VIEWS.items():
         domain = _DOMAIN_LABELS.get(view_name, view_name)
-        fields = ", ".join(_FIELD_LABELS.get(c, c.replace("_", " ")) for c in sorted(view.columns))
+        measures = sorted(c for c in view.columns if c not in _DIMENSION_FIELDS)
+        fields = ", ".join(_FIELD_LABELS.get(c, c.replace("_", " ")) for c in measures)
 
         metric_line = ""
         metric_names = metrics_by_view.get(view_name)
@@ -265,12 +296,15 @@ _INDEX_HTML = """<!doctype html>
   .scope-domain { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin: 0 0 6px; }
   .scope-fields { font-size: 0.82rem; color: var(--text-dim); margin: 0; line-height: 1.5; }
   .scope-metric { font-size: 0.78rem; color: var(--text); margin: 8px 0 0; font-weight: 600; }
-  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0; }
   .example-chip {
-    font-family: var(--sans); font-size: 0.78rem; color: var(--accent); background: var(--accent-soft);
-    border: none; border-radius: 20px; padding: 5px 12px; cursor: pointer; text-align: left; margin: 0;
+    font-family: var(--sans); font-size: 0.78rem; font-weight: 600; color: var(--accent);
+    background: transparent; border: 1px solid var(--accent); border-radius: 20px;
+    padding: 5px 12px; cursor: pointer; text-align: left; margin: 0;
+    transition: background-color 0.12s ease, color 0.12s ease;
   }
-  .example-chip:hover { filter: brightness(1.06); }
+  .example-chip::before { content: "\\2192 "; }
+  .example-chip:hover, .example-chip:focus-visible { background: var(--accent); color: #ffffff; outline: none; }
 </style>
 </head>
 <body>
@@ -286,6 +320,7 @@ _INDEX_HTML = """<!doctype html>
   <label for="question">Question</label>
   <textarea id="question" placeholder="What is the ARM for Basic plans in the US?"></textarea>
 
+  <label>Try an example</label>
   <div class="examples">
     <button type="button" class="example-chip" data-question="What is our ARM by region?">ARM by region</button>
     <button type="button" class="example-chip" data-question="What was our monthly churn rate in APAC?">Churn rate in APAC</button>

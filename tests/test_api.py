@@ -58,6 +58,11 @@ class ApiTests(unittest.TestCase):
         self.assertIn("askButton", response.text)
         self.assertIn("/ask", response.text)
 
+    def test_index_page_example_chips_are_labeled_as_clickable(self) -> None:
+        response = self.client.get("/")
+        self.assertIn("Try an example", response.text)
+        self.assertIn("example-chip", response.text)
+
     def test_index_page_is_never_rate_limited(self) -> None:
         for _ in range(RATE_LIMIT_MAX_REQUESTS + 5):
             response = self.client.get("/")
@@ -71,7 +76,20 @@ class ApiTests(unittest.TestCase):
 
         self.assertNotIn("__SCOPE_PANEL__", response.text)
         self.assertIn(_build_scope_html(), response.text)
-        self.assertEqual(response.text.count('class="scope-card"'), len(ALLOWED_VIEWS))
+        # one "Filter & group by" dimensions card, plus one card per approved view
+        self.assertEqual(response.text.count('class="scope-card"'), len(ALLOWED_VIEWS) + 1)
+
+    def test_scope_panel_dimensions_do_not_duplicate_into_measure_cards(self) -> None:
+        # region/month/plan belong in the "Filter & group by" card only --
+        # they used to be duplicated into every domain card's field list.
+        html = _build_scope_html()
+        dimensions_card, *domain_cards = html.split('<div class="scope-card">')[1:]
+
+        self.assertIn("Filter &amp; group by", dimensions_card)
+        for card in domain_cards:
+            fields_text = card.split('<p class="scope-fields">')[1].split("</p>")[0]
+            terms = {term.strip() for term in fields_text.split(",")}
+            self.assertTrue(terms.isdisjoint({"region", "month", "plan"}), fields_text)
 
     def test_ask_returns_sql_and_json_safe_rows_on_success(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])

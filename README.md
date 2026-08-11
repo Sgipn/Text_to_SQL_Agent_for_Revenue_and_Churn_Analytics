@@ -202,8 +202,27 @@ curl -X POST http://127.0.0.1:8000/ask \
   "summary": "The average revenue per membership for Basic plans in the US is approximately $7.76."
 }
 ```
-`confidence_interval` is `null` when the query isn't computing a defined ratio metric. `summary` is `null` unless `"summarize": true` was requested. `GET /health` is a plain liveness check. Interactive docs are available at `/docs` once the server is running.
+`confidence_interval` is `null` when the query isn't computing a defined ratio metric. `summary` is `null` unless `"summarize": true` was requested. `GET /health` is a plain liveness check, never gated. Interactive docs are available at `/docs` once the server is running.
+
+**Abuse protection for `/ask`.** Every request triggers a real, billed Claude API call, so before deploying this anywhere public, set `ASK_API_KEY` (in `.env` or the host's environment). Once set, `/ask` requires a matching `X-API-Key` header (missing or wrong -> `401`). Unset by default so local dev and the test suite are unaffected. Independent of that, an in-memory sliding-window limiter caps every client (the API key if configured, else the caller's IP) at `RATE_LIMIT_MAX_REQUESTS` requests per `RATE_LIMIT_WINDOW_SECONDS` (10 per 60s by default, in `app/api.py`) -> `429` past that. In-memory state is fine for a single-instance deployment (e.g. a free Render web service) and resets on restart; it isn't meant to survive multiple instances behind a load balancer.
+
+## Deployment
+
+DuckDB and ChromaDB are both embedded (no database server to run), and the data is static synthetic data, not something that needs a live pipeline -- so `Dockerfile` bakes the DuckDB warehouse and the Chroma vector index (including the one-time ONNX embedding model download) in at *build* time. The resulting image needs no setup step and no network access at startup, only for the Claude API itself at request time.
+
+**Run it locally in Docker:**
+```
+docker build -t semantic-metric-repo .
+docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -e ASK_API_KEY=some-secret semantic-metric-repo
+```
+
+**Deploy to Render** (free tier, no credit card required -- see `render.yaml`):
+1. Push this repo to GitHub.
+2. In Render, "New Blueprint Instance" -> point it at the repo. `render.yaml` configures a Docker web service with a `/health` check.
+3. Set `ANTHROPIC_API_KEY` and `ASK_API_KEY` in Render's dashboard (they're declared `sync: false` in `render.yaml`, so Render prompts for them rather than expecting them in the repo).
+
+Render's free tier spins down after 15 minutes idle (~1 minute cold-start on the next request) -- fine for a demo, not for something that needs to always be instantly warm.
 
 ## Roadmap
 
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log of all 14 phases, from initial file structure through natural-language result summarization.
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log of all 14 phases, from initial file structure through natural-language result summarization, plus the deployment-readiness work that followed.

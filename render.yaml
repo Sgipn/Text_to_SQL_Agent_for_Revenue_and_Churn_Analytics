@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: semantic-metric-repository
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ASK_API_KEY
+        sync: false

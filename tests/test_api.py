@@ -1,8 +1,9 @@
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.api import app, get_llm_client
+from app.api import API_KEY_ENV_VAR, RATE_LIMIT_MAX_REQUESTS, _request_log, app, get_llm_client
 from app.services.query_execution import DB_PATH
 from app.services.vector_store import get_collection
 
@@ -38,9 +39,11 @@ def _retrieval_index_ready() -> bool:
 class ApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
+        _request_log.clear()
 
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
+        _request_log.clear()
 
     def test_health_check(self) -> None:
         response = self.client.get("/health")
@@ -129,6 +132,54 @@ class ApiTests(unittest.TestCase):
     def test_ask_rejects_missing_question_with_422(self) -> None:
         response = self.client.post("/ask", json={})
         self.assertEqual(response.status_code, 422)
+
+    def test_ask_works_without_a_key_when_none_is_configured(self) -> None:
+        # ASK_API_KEY unset (the default) -- no auth required, matching
+        # every other test in this file that never sends X-API-Key.
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
+
+        response = self.client.post("/ask", json={"question": "What is our ARM?"})
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_ask_rejects_missing_api_key_when_configured(self) -> None:
+        with patch.dict("os.environ", {API_KEY_ENV_VAR: "secret123"}):
+            response = self.client.post("/ask", json={"question": "What is our ARM?"})
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_ask_rejects_wrong_api_key_when_configured(self) -> None:
+        with patch.dict("os.environ", {API_KEY_ENV_VAR: "secret123"}):
+            response = self.client.post(
+                "/ask", json={"question": "What is our ARM?"}, headers={"X-API-Key": "wrong"}
+            )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_ask_accepts_correct_api_key_when_configured(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
+
+        with patch.dict("os.environ", {API_KEY_ENV_VAR: "secret123"}):
+            response = self.client.post(
+                "/ask", json={"question": "What is our ARM?"}, headers={"X-API-Key": "secret123"}
+            )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_ask_rate_limits_after_max_requests_per_window(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL] * RATE_LIMIT_MAX_REQUESTS)
+
+        for _ in range(RATE_LIMIT_MAX_REQUESTS):
+            response = self.client.post("/ask", json={"question": "What is our ARM?"})
+            self.assertEqual(response.status_code, 200)
+
+        one_too_many = self.client.post("/ask", json={"question": "What is our ARM?"})
+        self.assertEqual(one_too_many.status_code, 429)
+
+    def test_health_check_is_never_rate_limited(self) -> None:
+        for _ in range(RATE_LIMIT_MAX_REQUESTS + 5):
+            response = self.client.get("/health")
+            self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ from app.agents.llm_client import ClaudeLLMClient, LLMClient
 from app.agents.text_to_sql_agent import answer_question
 from app.services.ratio_metric_registry import RATIO_METRICS
 from app.services.semantic_view_registry import ALLOWED_VIEWS
+from app.utils.generate_synthetic_data import PLAN_NAMES, REGIONS
 
 # Loaded eagerly at import time, not lazily inside the first LLM call (as
 # ClaudeLLMClient does for ANTHROPIC_API_KEY) -- ASK_API_KEY must be in
@@ -153,10 +154,11 @@ _DOMAIN_LABELS = {
     "fct_monthly_subscriber_activity": "Growth",
 }
 _DIMENSION_FIELDS = {"metric_month", "region_id", "plan_type"}
+_DIMENSION_VALUES: Dict[str, List[str]] = {"region_id": REGIONS, "plan_type": PLAN_NAMES}
 _FIELD_LABELS = {
     "metric_month": "month",
     "region_id": "region",
-    "plan_type": "plan",
+    "plan_type": "subscription plan",
     "active_paid_subscribers": "active paid subscribers",
     "total_net_revenue": "total net revenue",
     "active_subscribers": "active subscribers",
@@ -179,10 +181,15 @@ def _build_scope_html() -> str:
     dimension_terms = []
     for column in sorted(views_by_dimension):
         label = _FIELD_LABELS.get(column, column.replace("_", " "))
+        extras = []
+        if column in _DIMENSION_VALUES:
+            extras.append(", ".join(_DIMENSION_VALUES[column]))
         views_with_column = views_by_dimension[column]
         if len(views_with_column) < len(ALLOWED_VIEWS):
             only = ", ".join(_DOMAIN_LABELS.get(v, v) for v in views_with_column)
-            label += " (" + only + " only)"
+            extras.append(only + " only")
+        if extras:
+            label += " (" + "; ".join(extras) + ")"
         dimension_terms.append(label)
 
     cards = [
@@ -258,8 +265,6 @@ _INDEX_HTML = """<!doctype html>
   }
   textarea { min-height: 52px; resize: vertical; }
   input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
-  .row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 0.84rem; color: var(--text-dim); }
-  .row label { margin: 0; font-weight: normal; text-transform: none; letter-spacing: normal; }
   button {
     margin-top: 18px; font-family: var(--sans); font-size: 0.85rem; font-weight: 700;
     background: var(--accent); color: #ffffff; border: none; border-radius: 5px; padding: 9px 18px; cursor: pointer;
@@ -307,7 +312,6 @@ _INDEX_HTML = """<!doctype html>
     padding: 5px 12px; cursor: pointer; text-align: left; margin: 0;
     transition: background-color 0.12s ease, color 0.12s ease;
   }
-  .example-chip::before { content: "\\2192 "; }
   .example-chip:hover, .example-chip:focus-visible { background: var(--accent); color: #ffffff; outline: none; }
 </style>
 </head>
@@ -330,11 +334,6 @@ _INDEX_HTML = """<!doctype html>
     <button type="button" class="example-chip" data-question="What was our monthly churn rate in APAC?">Churn rate in APAC</button>
     <button type="button" class="example-chip" data-question="Show me revenue by plan type in Q2 2024">Revenue by plan, Q2 2024</button>
     <button type="button" class="example-chip" data-question="Which region had the most new subscribers last quarter?">New subscribers by region</button>
-  </div>
-
-  <div class="row">
-    <input type="checkbox" id="summarize">
-    <label for="summarize">Also generate a summary</label>
   </div>
 
   <button id="askButton">Run query</button>
@@ -381,7 +380,6 @@ function renderCiBar(ci) {
 
 document.getElementById('askButton').addEventListener('click', async () => {
   const question = document.getElementById('question').value.trim();
-  const summarize = document.getElementById('summarize').checked;
   const resultEl = document.getElementById('result');
   const button = document.getElementById('askButton');
 
@@ -397,7 +395,7 @@ document.getElementById('askButton').addEventListener('click', async () => {
     const response = await fetch('/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKeyInput.value },
-      body: JSON.stringify({ question: question, summarize: summarize }),
+      body: JSON.stringify({ question: question, summarize: true }),
     });
 
     if (response.status === 401) {

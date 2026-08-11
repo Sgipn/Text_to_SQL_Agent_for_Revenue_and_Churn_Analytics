@@ -1,4 +1,4 @@
-# Semantic Metric Repository Text-to-SQL Agent
+# Text-to-SQL Agent via Semantic Metric Repository
 
 [![Tests](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml/badge.svg)](https://github.com/Sgipn/Semantic-Metric-Repository-Self-Service-Text-to-SQL-Agent/actions/workflows/tests.yml)
 

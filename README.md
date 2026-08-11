@@ -167,6 +167,8 @@ tests/
 
 Beyond calling `answer_question()` directly (see the Example above), the agent is also reachable via:
 
+**Web UI** -- the API itself serves a minimal browser page at `/` (plain HTML/CSS/vanilla JS, inlined into `app/api.py`, no build step, no new dependency): a question box, an optional summarize checkbox, and an API key field (saved in the browser's `localStorage` so you only enter it once). Open `http://127.0.0.1:8000/` (or your deployed URL) after starting the API below.
+
 **CLI** -- installed as a console script by `pip install -e .`:
 ```
 semantic-agent "What was total revenue by region in Q2 2024?"

@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from app.agents.llm_client import ClaudeLLMClient, LLMClient
@@ -130,9 +131,161 @@ def _dataframe_to_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return records
 
 
+_INDEX_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semantic Metric Repository</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; line-height: 1.5; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .muted { color: #6b7280; font-size: 0.9rem; }
+  label { display: block; margin-top: 16px; font-weight: 600; font-size: 0.9rem; }
+  input[type=text], input[type=password], textarea {
+    width: 100%; box-sizing: border-box; padding: 8px; font-size: 1rem;
+    border: 1px solid #9ca3af; border-radius: 6px; margin-top: 4px; font-family: inherit;
+  }
+  textarea { min-height: 60px; resize: vertical; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .row label { margin: 0; font-weight: normal; }
+  button { margin-top: 16px; padding: 10px 20px; font-size: 1rem; border-radius: 6px; border: none; background: #2563eb; color: white; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  pre { background: rgba(128,128,128,0.12); padding: 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; display: block; overflow-x: auto; }
+  th, td { border: 1px solid rgba(128,128,128,0.4); padding: 6px 10px; text-align: left; font-size: 0.9rem; white-space: nowrap; }
+  .error { color: #dc2626; font-weight: 600; }
+  #result { margin-top: 24px; }
+  #result h3 { margin-bottom: 4px; font-size: 1rem; }
+</style>
+</head>
+<body>
+<h1>Semantic Metric Repository</h1>
+<p class="muted">Ask a natural-language question about revenue or subscriber activity. Answers are grounded in an approved semantic layer -- generated SQL is validated before it ever touches the database.</p>
+
+<label for="apiKey">API key</label>
+<input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off">
+
+<label for="question">Question</label>
+<textarea id="question" placeholder="What is our Average Revenue per Membership?"></textarea>
+
+<div class="row">
+  <input type="checkbox" id="summarize">
+  <label for="summarize">Also generate a natural-language summary</label>
+</div>
+
+<button id="askButton">Ask</button>
+
+<div id="result"></div>
+
+<script>
+const apiKeyInput = document.getElementById('apiKey');
+apiKeyInput.value = localStorage.getItem('askApiKey') || '';
+apiKeyInput.addEventListener('input', () => localStorage.setItem('askApiKey', apiKeyInput.value));
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById('askButton').addEventListener('click', async () => {
+  const question = document.getElementById('question').value.trim();
+  const summarize = document.getElementById('summarize').checked;
+  const resultEl = document.getElementById('result');
+  const button = document.getElementById('askButton');
+
+  if (!question) {
+    resultEl.innerHTML = '<p class="error">Enter a question first.</p>';
+    return;
+  }
+
+  button.disabled = true;
+  resultEl.innerHTML = '<p class="muted">Asking... (first request after idle can take up to a minute)</p>';
+
+  try {
+    const response = await fetch('/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKeyInput.value },
+      body: JSON.stringify({ question: question, summarize: summarize }),
+    });
+
+    if (response.status === 401) {
+      resultEl.innerHTML = '<p class="error">Invalid or missing API key.</p>';
+      return;
+    }
+    if (response.status === 429) {
+      resultEl.innerHTML = '<p class="error">Rate limit exceeded. Try again shortly.</p>';
+      return;
+    }
+    if (!response.ok) {
+      resultEl.innerHTML = '<p class="error">Request failed (HTTP ' + response.status + ').</p>';
+      return;
+    }
+
+    const data = await response.json();
+
+    if (!data.succeeded) {
+      resultEl.innerHTML = '<p class="error">Could not answer: ' + escapeHtml(data.error || 'unknown error') + '</p>';
+      return;
+    }
+
+    let html = '';
+    html += '<p class="muted">' + data.attempts + ' attempt(s)</p>';
+    html += '<h3>SQL</h3><pre>' + escapeHtml(data.sql) + '</pre>';
+
+    if (data.rows && data.rows.length) {
+      const columns = Object.keys(data.rows[0]);
+      const shown = data.rows.slice(0, 50);
+      html += '<h3>Result (' + data.row_count + ' rows)</h3>';
+      html += '<table><thead><tr>' + columns.map(function (c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+      shown.forEach(function (row) {
+        html += '<tr>' + columns.map(function (c) { return '<td>' + escapeHtml(String(row[c])) + '</td>'; }).join('') + '</tr>';
+      });
+      html += '</tbody></table>';
+      if (data.row_count > 50) {
+        html += '<p class="muted">Showing first 50 of ' + data.row_count + ' rows.</p>';
+      }
+    }
+
+    if (data.confidence_interval) {
+      const ci = data.confidence_interval;
+      html += '<h3>' + Math.round(ci.confidence_level * 100) + '% Confidence Interval</h3><p>['
+        + ci.lower.toFixed(4) + ', ' + ci.upper.toFixed(4) + '] (estimate=' + ci.estimate.toFixed(4)
+        + ', se=' + ci.standard_error.toFixed(4) + ', n=' + ci.n_units + ')</p>';
+    }
+
+    if (data.summary) {
+      html += '<h3>Summary</h3><p>' + escapeHtml(data.summary) + '</p>';
+    }
+
+    resultEl.innerHTML = html;
+  } catch (err) {
+    resultEl.innerHTML = '<p class="error">Network error: ' + escapeHtml(String(err)) + '</p>';
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
+"""
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> HTMLResponse:
+    """A minimal browser UI over /ask -- plain HTML/CSS/vanilla JS, no build
+    step, no new dependency. Inlined as a string (not a separate static
+    file) so it's guaranteed to be found regardless of whether the app is
+    imported from the source tree or an installed package -- a static asset
+    file would need its own packaging config to be reliably included."""
+    return HTMLResponse(content=_INDEX_HTML)
 
 
 @app.post("/ask", response_model=AskResponse, dependencies=[Depends(enforce_abuse_protection)])

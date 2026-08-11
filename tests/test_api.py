@@ -50,6 +50,18 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
 
+    def test_index_page_serves_html_ui(self) -> None:
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/html", response.headers["content-type"])
+        self.assertIn("askButton", response.text)
+        self.assertIn("/ask", response.text)
+
+    def test_index_page_is_never_rate_limited(self) -> None:
+        for _ in range(RATE_LIMIT_MAX_REQUESTS + 5):
+            response = self.client.get("/")
+            self.assertEqual(response.status_code, 200)
+
     def test_ask_returns_sql_and_json_safe_rows_on_success(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
 

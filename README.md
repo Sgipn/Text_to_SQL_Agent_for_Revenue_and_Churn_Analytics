@@ -92,6 +92,20 @@ Result (1 rows):
 
 Validated with Monte Carlo simulation: empirical coverage of the nominal 95% interval stays close to 95% from n=3 periods up through n=100 (3,000 repeated samples per n), which is what motivated switching from a fixed z-score to the t distribution in the first place -- the z-score version undercovered noticeably at small n. This is enrichment, not part of the safety-critical path -- if it fails for any reason (too few periods, an incompatible filter, NaN inputs), the agent silently omits it rather than failing the whole answer.
 
+## Result summarization
+
+An optional second LLM call (`app/agents/result_summarization.py`) describes a successful result in one or two sentences of plain English. It's entirely separate from SQL generation -- its own prompt, no ability to generate or modify SQL -- and best-effort like the confidence interval: a failure here never affects whether the question is considered answered. Opt-in (`summarize=True` / `--summarize` / `"summarize": true`), since it's an extra LLM call.
+
+```
+$ semantic-agent "What was our monthly churn rate in APAC?" --summarize
+...
+Summary: APAC's monthly churn rate started very high at 28.6% in January 2024 but dropped
+sharply to near-zero by February 2024, then stabilized in a low range of roughly 1.5%-6.2%
+for the remainder of the shown period through August 2025.
+```
+
+That example is worth a closer look: the underlying result has 24 months, but only the first 20 are shown to the summarization prompt (to bound cost on large results). The summary correctly stopped its claim at "through August 2025" -- the actual last month it was shown -- rather than describing the full 24-month history it never saw. Live testing confirmed this grounding discipline across several representative questions before trusting it: every number in every generated summary matched the underlying table exactly.
+
 ## Tech stack
 
 - **Python 3.11+**
@@ -157,7 +171,7 @@ Beyond calling `answer_question()` directly (see the Example above), the agent i
 ```
 semantic-agent "What was total revenue by region in Q2 2024?"
 ```
-(equivalently: `python -m app.cli "..."`). Prints the generated SQL and result table; exits non-zero if the question can't be answered.
+(equivalently: `python -m app.cli "..."`). Prints the generated SQL and result table; exits non-zero if the question can't be answered. Add `--summarize` for a one-sentence natural-language summary (an extra LLM call).
 
 **HTTP API** -- a minimal FastAPI app (`pip install -e ".[api]"` first):
 ```
@@ -166,7 +180,7 @@ uvicorn app.api:app --reload
 ```
 curl -X POST http://127.0.0.1:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is the ARM for Basic plans in the US?"}'
+  -d '{"question": "What is the ARM for Basic plans in the US?", "summarize": true}'
 ```
 ```json
 {
@@ -184,11 +198,12 @@ curl -X POST http://127.0.0.1:8000/ask \
     "upper": 7.827562000408176,
     "n_units": 24,
     "confidence_level": 0.95
-  }
+  },
+  "summary": "The average revenue per membership for Basic plans in the US is approximately $7.76."
 }
 ```
-`confidence_interval` is `null` when the query isn't computing a defined ratio metric. `GET /health` is a plain liveness check. Interactive docs are available at `/docs` once the server is running.
+`confidence_interval` is `null` when the query isn't computing a defined ratio metric. `summary` is `null` unless `"summarize": true` was requested. `GET /health` is a plain liveness check. Interactive docs are available at `/docs` once the server is running.
 
 ## Roadmap
 
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log. What's planned next: natural-language result summarization, grounded only in the actual returned rows and kept fully separate from SQL generation.
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the phase-by-phase build log of all 14 phases, from initial file structure through natural-language result summarization.

@@ -13,6 +13,7 @@ import pandas as pd
 from app.agents.confidence_interval import compute_ratio_confidence_interval
 from app.agents.llm_client import ClaudeLLMClient, LLMClient
 from app.agents.prompt_builder import build_retry_prompt, build_system_prompt
+from app.agents.result_summarization import summarize_result
 from app.agents.sql_extraction import parse_llm_response
 from app.services.metric_statistics import RatioConfidenceInterval
 from app.services.query_execution import execute_safe_query
@@ -30,6 +31,7 @@ class AgentResult:
     attempts: int
     error: Optional[str] = None
     confidence_interval: Optional[RatioConfidenceInterval] = None
+    summary: Optional[str] = None
 
     @property
     def succeeded(self) -> bool:
@@ -41,6 +43,7 @@ def answer_question(
     llm_client: Optional[LLMClient] = None,
     top_k: int = DEFAULT_TOP_K,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    summarize: bool = False,
 ) -> AgentResult:
     """Answers a natural-language business question end to end.
 
@@ -48,6 +51,11 @@ def answer_question(
     executes it. If validation rejects the SQL, the error is fed back to
     the LLM and it gets another attempt (up to max_attempts) rather than
     failing on the first hallucinated join or disallowed table.
+
+    If `summarize` is True and the query succeeds, a second, separate LLM
+    call (app.agents.result_summarization) describes the returned rows in
+    plain English -- opt-in since it's an extra API call, and best-effort:
+    it never affects whether the question is considered answered.
     """
     llm_client = llm_client or ClaudeLLMClient()
 
@@ -71,12 +79,14 @@ def answer_question(
             result = execute_safe_query(sql)
             statement = parse_safe_select(sql)  # already validated by execute_safe_query above
             confidence_interval = compute_ratio_confidence_interval(statement)
+            summary = summarize_result(question, result, llm_client) if summarize else None
             return AgentResult(
                 question=question,
                 sql=sql,
                 result=result,
                 attempts=attempt,
                 confidence_interval=confidence_interval,
+                summary=summary,
             )
         except UnsafeQueryError as exc:
             last_error = str(exc)

@@ -29,9 +29,14 @@ def main(argv: Optional[List[str]] = None, llm_client: Optional[LLMClient] = Non
     parser.add_argument(
         "--max-attempts", type=int, default=None, help="Max LLM generation attempts before giving up."
     )
+    parser.add_argument(
+        "--summarize",
+        action="store_true",
+        help="Also generate a one-sentence natural-language summary of the result (extra LLM call).",
+    )
     args = parser.parse_args(argv)
 
-    kwargs = {"llm_client": llm_client}
+    kwargs = {"llm_client": llm_client, "summarize": args.summarize}
     if args.top_k is not None:
         kwargs["top_k"] = args.top_k
     if args.max_attempts is not None:
@@ -72,6 +77,9 @@ def main(argv: Optional[List[str]] = None, llm_client: Optional[LLMClient] = Non
             f"\n{pct}% CI: [{ci.lower:.4f}, {ci.upper:.4f}] "
             f"(estimate={ci.estimate:.4f}, se={ci.standard_error:.4f}, n={ci.n_units} periods)"
         )
+
+    if result.summary is not None:
+        print(f"\nSummary: {result.summary}")
 
     return 0
 

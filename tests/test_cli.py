@@ -66,6 +66,22 @@ class CliTests(unittest.TestCase):
 
         self.assertIn("% CI:", buf.getvalue())
 
+    def test_summarize_flag_prints_summary(self) -> None:
+        client = FakeLLMClient([VALID_ARM_SQL, "ARM is roughly 13 dollars per membership."])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            main(["What is our ARM?", "--summarize"], llm_client=client)
+
+        self.assertIn("Summary: ARM is roughly 13 dollars per membership.", buf.getvalue())
+
+    def test_no_summarize_flag_omits_summary(self) -> None:
+        client = FakeLLMClient([VALID_ARM_SQL])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            main(["What is our ARM?"], llm_client=client)
+
+        self.assertNotIn("Summary:", buf.getvalue())
+
     def test_truncates_large_result_sets_for_display(self) -> None:
         client = FakeLLMClient(
             ["```sql\nSELECT * FROM semantic_views.fct_monthly_subscriber_revenue\n```"]

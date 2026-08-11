@@ -74,6 +74,38 @@ class TextToSqlAgentTests(unittest.TestCase):
         self.assertTrue(result.succeeded)
         self.assertIsNone(result.confidence_interval)
 
+    def test_summarize_false_by_default_and_never_calls_llm_a_second_time(self) -> None:
+        client = FakeLLMClient([VALID_ARM_SQL])
+        result = answer_question("What is our ARM?", llm_client=client)
+
+        self.assertIsNone(result.summary)
+        self.assertEqual(len(client.calls), 1)
+
+    def test_summarize_true_attaches_a_grounded_summary(self) -> None:
+        client = FakeLLMClient([VALID_ARM_SQL, "ARM is about 13 dollars per membership."])
+        result = answer_question("What is our ARM?", llm_client=client, summarize=True)
+
+        self.assertTrue(result.succeeded)
+        self.assertEqual(result.summary, "ARM is about 13 dollars per membership.")
+        self.assertEqual(len(client.calls), 2)
+
+    def test_summarize_true_degrades_to_none_on_summary_failure_without_failing_the_answer(self) -> None:
+        class SqlThenRaisingClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def generate(self, system_prompt: str, user_prompt: str) -> str:
+                self.calls += 1
+                if self.calls == 1:
+                    return VALID_ARM_SQL
+                raise RuntimeError("summarization backend down")
+
+        result = answer_question("What is our ARM?", llm_client=SqlThenRaisingClient(), summarize=True)
+
+        self.assertTrue(result.succeeded)
+        self.assertIsNotNone(result.result)
+        self.assertIsNone(result.summary)
+
     def test_retries_after_invalid_sql_then_succeeds(self) -> None:
         client = FakeLLMClient([UNAPPROVED_TABLE_SQL, VALID_ARM_SQL])
         result = answer_question("What is our ARM?", llm_client=client, max_attempts=2)

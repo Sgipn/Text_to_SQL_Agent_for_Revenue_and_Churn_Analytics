@@ -60,6 +60,22 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(body["row_count"], 1)
         self.assertIsInstance(body["rows"], list)
 
+    def test_ask_summarize_true_includes_summary(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient(
+            [VALID_ARM_SQL, "ARM is roughly 13 dollars per membership."]
+        )
+
+        response = self.client.post("/ask", json={"question": "What is our ARM?", "summarize": True})
+
+        self.assertEqual(response.json()["summary"], "ARM is roughly 13 dollars per membership.")
+
+    def test_ask_summarize_false_by_default_omits_summary(self) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
+
+        response = self.client.post("/ask", json={"question": "What is our ARM?"})
+
+        self.assertIsNone(response.json()["summary"])
+
     def test_ask_includes_confidence_interval_for_ratio_metric(self) -> None:
         app.dependency_overrides[get_llm_client] = lambda: FakeLLMClient([VALID_ARM_SQL])
 

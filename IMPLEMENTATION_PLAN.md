@@ -73,5 +73,7 @@
 - Caught on review: matching was case-sensitive (table/schema and column names), but sqlglot preserves whatever case a query is written in while DuckDB folds unquoted identifiers case-insensitively -- a semantically valid, differently-cased query (e.g. `Total_Net_Revenue`) would have been wrongly rejected. Fixed for both table/schema and column matching (the table-name gap predated this phase but lives in the same function). Added regression tests and re-verified end to end.
 
 ## 14. Natural-language result summarization
-- Add an optional step that summarizes a returned result set in a sentence or two, grounded only in the actual returned rows.
-- Keep this fully separate from SQL generation so the safety-critical path is unaffected.
+- Add `app/agents/result_summarization.py`: an optional, opt-in second LLM call (`summarize=True` / `--summarize` / `"summarize": true`) that describes a successful result in one or two sentences, using its own prompt with the actual returned rows embedded as text (truncated and noted past a row cap, to bound cost on large results).
+- Keep it fully separate from SQL generation -- a distinct prompt and LLM call with no ability to generate or modify SQL -- and best-effort like the confidence interval: wrapped so any failure degrades to `None` rather than affecting whether the question is considered answered.
+- Live-test grounding quality (a soft, prompt-based constraint, not something AST validation can enforce) across several representative questions before trusting it. Every number in every generated summary matched the underlying table exactly; on a truncated 24-row churn result, the model correctly limited its claim to the 20 months it was actually shown rather than describing the full history -- codified as a permanent live regression test.
+- Surface it in `AgentResult.summary`, the CLI (`--summarize`), and the API (`summarize` request field / `summary` response field).

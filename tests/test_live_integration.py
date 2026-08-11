@@ -68,6 +68,16 @@ class LiveTextToSqlIntegrationTests(unittest.TestCase):
         self.assertNotIn("avg(", sql_lower)
         self.assertIsNotNone(result.confidence_interval)
 
+    def test_summarize_grounds_its_claim_in_the_actual_returned_data(self) -> None:
+        result = answer_question("What was total revenue by region in Q2 2024?", summarize=True)
+
+        self.assertTrue(result.succeeded, msg=result.error)
+        self.assertIsNotNone(result.summary)
+        # spot-check groundedness: the summary should name the actual
+        # top region by revenue, not an arbitrary or hallucinated one.
+        top_region = result.result.loc[result.result["total_net_revenue"].idxmax(), "region_id"]
+        self.assertIn(top_region, result.summary)
+
     def test_never_mutates_data_even_when_asked_to_delete(self) -> None:
         result = answer_question("Delete all revenue records for LATAM")
 

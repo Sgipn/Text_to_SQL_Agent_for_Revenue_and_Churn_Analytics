@@ -27,6 +27,9 @@ class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     top_k: Optional[int] = Field(default=None, ge=1, le=20)
     max_attempts: Optional[int] = Field(default=None, ge=1, le=5)
+    summarize: bool = Field(
+        default=False, description="Also generate a one-sentence summary of the result (extra LLM call)."
+    )
 
 
 class ConfidenceIntervalResponse(BaseModel):
@@ -47,6 +50,7 @@ class AskResponse(BaseModel):
     rows: Optional[List[Dict[str, Any]]] = None
     row_count: Optional[int] = None
     confidence_interval: Optional[ConfidenceIntervalResponse] = None
+    summary: Optional[str] = None
 
 
 def get_llm_client() -> LLMClient:
@@ -79,7 +83,7 @@ def health() -> dict:
 
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest, llm_client: LLMClient = Depends(get_llm_client)) -> AskResponse:
-    kwargs: Dict[str, Any] = {"llm_client": llm_client}
+    kwargs: Dict[str, Any] = {"llm_client": llm_client, "summarize": request.summarize}
     if request.top_k is not None:
         kwargs["top_k"] = request.top_k
     if request.max_attempts is not None:
@@ -117,4 +121,5 @@ def ask(request: AskRequest, llm_client: LLMClient = Depends(get_llm_client)) ->
         rows=rows,
         row_count=row_count,
         confidence_interval=confidence_interval,
+        summary=result.summary,
     )
